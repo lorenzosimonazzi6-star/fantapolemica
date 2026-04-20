@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fantadraft – Fantacalcio Manageriale</title>
+  <meta name="description" content="Fantacalcio manageriale con draft, salary cap e modalità Mantra">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+</head>
+<body>
+
+<!-- ══ LOGIN PAGE ══════════════════════════════════════ -->
+<div id="login-page">
+  <div class="login-box">
+
+    <div class="login-logo">
+      <div class="logo-text">FANTADRAFT</div>
+      <div class="logo-sub">Fantacalcio Manageriale · Mantra · Draft</div>
+    </div>
+
+    <div class="card">
+      <div class="login-tabs">
+        <button class="login-tab active" data-mode="login">Accedi</button>
+        <button class="login-tab" data-mode="register">Registrati</button>
+      </div>
+
+      <form class="login-form" id="auth-form">
+        <div class="form-group hidden" id="field-displayname">
+          <label class="form-label">Nome Manager</label>
+          <input class="form-input" id="auth-displayname" type="text" placeholder="Es. Lorenzo">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input class="form-input" id="auth-email" type="email" placeholder="email@esempio.it" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input class="form-input" id="auth-password" type="password" placeholder="••••••••" required minlength="6">
+        </div>
+        <div id="auth-error" class="form-error"></div>
+        <button class="btn btn-primary btn-lg" id="auth-submit-btn" type="submit" style="width:100%;justify-content:center">
+          Accedi
+        </button>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ APP SHELL ═══════════════════════════════════════ -->
+<div id="app" class="hidden">
+
+  <!-- NAVBAR -->
+  <nav id="navbar">
+    <div class="navbar-top">
+      <div class="navbar-logo">
+        FANTADRAFT
+        <span class="league-label hidden" id="navbar-league-label"></span>
+      </div>
+      <div class="navbar-right">
+        <div id="league-switcher-wrap"></div>
+        <span class="navbar-user" id="navbar-username"></span>
+        <button class="btn btn-ghost btn-sm" id="logout-btn">Esci</button>
+      </div>
+    </div>
+
+    <!-- TABS — nascosti finché non c'è una lega -->
+    <div class="navbar-tabs hidden" id="navbar-tabs">
+      <button class="nav-tab active" data-tab="home">🏠 Home</button>
+      <button class="nav-tab" data-tab="calendario">📅 Calendario</button>
+      <button class="nav-tab" data-tab="classifica">🏆 Classifica</button>
+      <button class="nav-tab" data-tab="formazioni">📋 Formazioni</button>
+      <button class="nav-tab" data-tab="rose">🌹 Rose</button>
+      <button class="nav-tab" data-tab="cap">💰 CAP</button>
+      <button class="nav-tab" data-tab="scambi">🔄 Scambi</button>
+      <button class="nav-tab" data-tab="playoff">🥊 Playoff</button>
+      <button class="nav-tab" data-tab="lottery">🎰 Lottery</button>
+      <button class="nav-tab" data-tab="draft">📝 Draft</button>
+      <button class="nav-tab" data-tab="regolamento">📖 Regolamento</button>
+    </div>
+  </nav>
+
+  <!-- PAGE CONTENT -->
+  <div id="page-content">
+
+    <div id="tab-home"        class="tab-section active"></div>
+    <div id="tab-calendario"  class="tab-section"></div>
+    <div id="tab-classifica"  class="tab-section"></div>
+    <div id="tab-formazioni"  class="tab-section"></div>
+    <div id="tab-rose"        class="tab-section"></div>
+    <div id="tab-cap"         class="tab-section"></div>
+    <div id="tab-scambi"      class="tab-section"></div>
+    <div id="tab-playoff"     class="tab-section"></div>
+    <div id="tab-lottery"     class="tab-section"></div>
+    <div id="tab-draft"       class="tab-section"></div>
+    <div id="tab-regolamento" class="tab-section"></div>
+
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
