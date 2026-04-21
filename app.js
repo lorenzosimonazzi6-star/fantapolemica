@@ -5,13 +5,14 @@
 
 import {
   auth, db,
-  registerUser, loginUser, logoutUser,
+  registerUser, loginUser, logoutUser, resetPassword,
   getUserProfile, createLeague, joinLeague,
   getLeague,
   ref, get, onValue, off,
   onAuthStateChanged,
   translateAuthError,
   capLevelLabel, capLevelBadgeClass,
+  isSuperAdmin,
 } from "./firebase.js";
 
 import { renderRose       as _renderRose       } from "./rose.js";
@@ -47,7 +48,20 @@ onAuthStateChanged(auth, async (firebaseUser) => {
     currentUser    = firebaseUser;
     currentProfile = await getUserProfile(firebaseUser.uid);
     showApp();
-    await loadLeague();
+
+    if (isSuperAdmin(firebaseUser.uid)) {
+      // Superadmin: carica la lega se ce l'ha, poi mostra sempre la tab superadmin
+      await loadLeague();
+      // Assicura che la tab superadmin sia sempre visibile
+      document.querySelector(".nav-tab-superadmin")?.classList.remove("hidden");
+      // Se non ha nessuna lega, attiva direttamente la tab superadmin
+      if (!currentLeague) {
+        document.getElementById("navbar-tabs").classList.remove("hidden");
+        switchTab("superadmin");
+      }
+    } else {
+      await loadLeague();
+    }
   } else {
     currentUser    = null;
     currentProfile = null;
@@ -69,6 +83,19 @@ function showApp() {
   renderNavbarUser();
 }
 
+function showSuperAdminShell() {
+  // Mostra solo navbar minimale con tab superadmin
+  document.getElementById("navbar-tabs").classList.remove("hidden");
+  // Nascondi tutte le tab tranne superadmin
+  document.querySelectorAll(".nav-tab").forEach(btn => {
+    const isSA = btn.dataset.tab === "superadmin";
+    btn.classList.toggle("hidden", !isSA);
+    if (isSA) btn.classList.remove("hidden");
+  });
+  // Attiva tab superadmin
+  switchTab("superadmin");
+}
+
 // Login / Register tabs
 document.querySelectorAll(".login-tab").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -77,7 +104,55 @@ document.querySelectorAll(".login-tab").forEach(btn => {
     document.getElementById("field-displayname").classList.toggle("hidden", mode !== "register");
     document.getElementById("auth-submit-btn").textContent = mode === "login" ? "Accedi" : "Crea account";
     document.getElementById("auth-error").textContent = "";
+    // Mostra "Password dimenticata?" solo in modalità login
+    document.getElementById("forgot-wrap")?.classList.toggle("hidden", mode !== "login");
+    // Nascondi form reset se aperto
+    document.getElementById("reset-wrap")?.classList.add("hidden");
   });
+});
+
+// Password dimenticata
+document.getElementById("forgot-btn")?.addEventListener("click", () => {
+  const resetWrap  = document.getElementById("reset-wrap");
+  const forgotWrap = document.getElementById("forgot-wrap");
+  // Pre-compila con email già inserita
+  const email = document.getElementById("auth-email")?.value.trim();
+  if (email) document.getElementById("reset-email").value = email;
+  resetWrap?.classList.remove("hidden");
+  forgotWrap?.classList.add("hidden");
+});
+
+document.getElementById("reset-cancel-btn")?.addEventListener("click", () => {
+  document.getElementById("reset-wrap")?.classList.add("hidden");
+  document.getElementById("forgot-wrap")?.classList.remove("hidden");
+  document.getElementById("reset-error").textContent = "";
+});
+
+document.getElementById("reset-send-btn")?.addEventListener("click", async () => {
+  const email  = document.getElementById("reset-email").value.trim();
+  const errEl  = document.getElementById("reset-error");
+  const btn    = document.getElementById("reset-send-btn");
+  errEl.textContent = "";
+
+  if (!email) { errEl.textContent = "Inserisci la tua email"; return; }
+
+  btn.disabled = true; btn.textContent = "⏳ Invio...";
+  try {
+    await resetPassword(email);
+    errEl.style.color = "var(--green)";
+    errEl.textContent = "✓ Email inviata! Controlla la tua casella.";
+    btn.textContent = "✓ Inviata";
+    setTimeout(() => {
+      document.getElementById("reset-wrap")?.classList.add("hidden");
+      document.getElementById("forgot-wrap")?.classList.remove("hidden");
+      errEl.textContent = "";
+      btn.disabled = false; btn.textContent = "Invia link";
+    }, 3000);
+  } catch (err) {
+    errEl.style.color = "var(--red)";
+    errEl.textContent = translateAuthError(err.code || err.message);
+    btn.disabled = false; btn.textContent = "Invia link";
+  }
 });
 
 document.getElementById("auth-form").addEventListener("submit", async (e) => {
@@ -121,19 +196,42 @@ function renderNavbarUser() {
 
 function renderNavbarLeague() {
   const label = document.getElementById("navbar-league-label");
+  const isSA  = isSuperAdmin(currentUser?.uid);
+
   if (currentLeague) {
     label.textContent = `MANTRA · ${currentLeague.name}`;
     label.classList.remove("hidden");
     document.getElementById("navbar-tabs").classList.remove("hidden");
-    const isComm  = currentLeague.commissionerUid === currentUser?.uid;
-    const isSA    = isSuperAdmin(currentUser?.uid);
+    const isComm = currentLeague.commissionerUid === currentUser?.uid;
     document.querySelector(".nav-tab-admin")?.classList.toggle("hidden", !isComm && !isSA);
     document.querySelector(".nav-tab-superadmin")?.classList.toggle("hidden", !isSA);
+    const btnLabel = document.getElementById("league-switcher-current");
+    if (btnLabel) btnLabel.textContent = currentLeague.name;
   } else {
     label.textContent = "";
     label.classList.add("hidden");
-    document.getElementById("navbar-tabs").classList.add("hidden");
+    if (isSA) {
+      // Superadmin senza lega: mostra solo la tab superadmin
+      document.getElementById("navbar-tabs").classList.remove("hidden");
+      document.querySelectorAll(".nav-tab").forEach(btn => {
+        btn.classList.toggle("hidden", btn.dataset.tab !== "superadmin");
+      });
+      document.querySelector(".nav-tab-superadmin")?.classList.remove("hidden");
+    } else {
+      document.getElementById("navbar-tabs").classList.add("hidden");
+    }
   }
+}
+
+function showJoinLeagueModal() {
+  // Riusa il modal già presente nell'home tab (se c'è) o ne crea uno
+  const existing = document.getElementById("join-league-modal");
+  if (existing) { existing.classList.remove("hidden"); return; }
+  renderHome();
+  // Scrolla alla sezione join
+  setTimeout(() => {
+    document.getElementById("join-league-section")?.scrollIntoView({ behavior:"smooth" });
+  }, 100);
 }
 
 // Tab navigation
@@ -219,23 +317,102 @@ function getCurrentTab() {
   return active ? active.dataset.tab : "home";
 }
 
-// ── LEAGUE SWITCHER ──────────────────────────────
+// ── LEAGUE SWITCHER SIDEBAR ──────────────────────
 function renderLeagueSwitcher() {
   const container = document.getElementById("league-switcher-wrap");
   const leagues   = currentProfile?.leagues || {};
   const ids       = Object.keys(leagues);
 
+  // Se ha solo 1 lega non mostrare il switcher
   if (ids.length <= 1) { container.innerHTML = ""; return; }
 
-  Promise.all(ids.map(id =>
-    get(ref(db, `leagues/${id}/name`)).then(s => ({ id, name: s.val() || id }))
-  )).then(list => {
-    container.innerHTML = `
-      <select class="league-switcher" id="league-switcher">
-        ${list.map(l => `<option value="${l.id}" ${l.id === currentLeagueId ? "selected" : ""}>${l.name}</option>`).join("")}
-      </select>`;
-    document.getElementById("league-switcher")
-      .addEventListener("change", e => selectLeague(e.target.value));
+  container.innerHTML = `
+    <button class="btn btn-ghost btn-sm" id="league-switcher-btn" title="Cambia lega">
+      🏆 <span id="league-switcher-current">${currentLeague?.name || "Lega"}</span> ▾
+    </button>`;
+
+  document.getElementById("league-switcher-btn")
+    .addEventListener("click", () => openLeagueSidebar(ids));
+}
+
+async function openLeagueSidebar(ids) {
+  // Rimuovi sidebar esistente se aperta
+  document.getElementById("league-sidebar-overlay")?.remove();
+
+  // Carica nomi leghe
+  const list = await Promise.all(ids.map(id =>
+    get(ref(db, `leagues/${id}`)).then(s => {
+      const l = s.val();
+      return {
+        id,
+        name:      l?.name || id,
+        teams:     Object.keys(l?.teams || {}).length,
+        commissioner: l?.commissionerUid === currentUser?.uid,
+        season:    `GW${l?.settings?.gwStart||1}–GW${l?.settings?.gwEnd||34}`,
+      };
+    })
+  ));
+
+  const overlay = document.createElement("div");
+  overlay.id = "league-sidebar-overlay";
+  overlay.innerHTML = `
+    <div id="league-sidebar" class="league-sidebar">
+      <div class="league-sidebar-header">
+        <span style="font-weight:800;font-size:16px">Le tue leghe</span>
+        <button class="btn btn-ghost btn-sm" id="league-sidebar-close">✕</button>
+      </div>
+      <div class="league-sidebar-list">
+        ${list.map(l => `
+          <div class="league-sidebar-item ${l.id === currentLeagueId ? "active" : ""}"
+               data-lid="${l.id}">
+            <div class="lsi-left">
+              <div class="lsi-name">${l.name}</div>
+              <div class="lsi-meta">
+                ${l.teams} manager · ${l.season}
+                ${l.commissioner ? `<span class="badge badge-accent" style="font-size:9px;margin-left:4px">COMM</span>` : ""}
+              </div>
+            </div>
+            ${l.id === currentLeagueId
+              ? `<span style="color:var(--accent);font-size:18px">✓</span>`
+              : `<span style="color:var(--text3);font-size:12px">→</span>`}
+          </div>`).join("")}
+      </div>
+
+      <div class="league-sidebar-footer">
+        <button class="btn btn-secondary btn-sm" id="league-join-btn" style="width:100%;justify-content:center">
+          + Unisciti a una lega
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  // Chiudi cliccando overlay
+  overlay.addEventListener("click", e => {
+    if (e.target === overlay) overlay.remove();
+  });
+  document.getElementById("league-sidebar-close")
+    .addEventListener("click", () => overlay.remove());
+
+  // Seleziona lega
+  overlay.querySelectorAll(".league-sidebar-item").forEach(item => {
+    item.addEventListener("click", () => {
+      const lid = item.dataset.lid;
+      if (lid === currentLeagueId) { overlay.remove(); return; }
+      overlay.remove();
+      selectLeague(lid);
+    });
+  });
+
+  // Unisciti a lega
+  document.getElementById("league-join-btn")?.addEventListener("click", () => {
+    overlay.remove();
+    showJoinLeagueModal();
+  });
+
+  // Animazione apertura
+  requestAnimationFrame(() => {
+    document.getElementById("league-sidebar")?.classList.add("open");
   });
 }
 

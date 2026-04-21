@@ -11,6 +11,7 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
+  sendPasswordResetEmail,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   getDatabase,
@@ -42,7 +43,7 @@ export const db   = getDatabase(app);
 // UID dell'account superadmin (Lorenzo) — hardcoded come in fanta-seriea.it
 // Per trovare il tuo UID: Firebase Console → Authentication → Users
 export const SUPERADMIN_UIDS = new Set([
-  A7cmWVw9XHnbbsXtSVxpbw39sZln2
+  "7cmWVw9XHnbbsXtSVxpbw39sZln2"
 ]);
 
 export function isSuperAdmin(uid) {
@@ -85,6 +86,10 @@ export async function loginUser(email, password) {
 
 export async function logoutUser() {
   return signOut(auth);
+}
+
+export async function resetPassword(email) {
+  return sendPasswordResetEmail(auth, email);
 }
 
 export async function getUserProfile(uid) {

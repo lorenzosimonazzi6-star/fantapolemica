@@ -45,6 +45,30 @@
           style="width:100%;justify-content:center">Accedi</button>
       </form>
 
+      <!-- Password dimenticata -->
+      <div id="forgot-wrap" style="text-align:center;margin-top:14px">
+        <button id="forgot-btn" style="background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;text-decoration:underline;text-underline-offset:3px">
+          Password dimenticata?
+        </button>
+      </div>
+
+      <!-- Form reset password (nascosto di default) -->
+      <div id="reset-wrap" class="hidden" style="margin-top:14px">
+        <div style="font-size:13px;color:var(--text2);margin-bottom:10px">
+          Inserisci la tua email e ti mandiamo il link per reimpostare la password.
+        </div>
+        <div class="form-group">
+          <input class="form-input" id="reset-email" type="email" placeholder="email@esempio.it">
+        </div>
+        <div id="reset-error" class="form-error" style="margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" id="reset-send-btn" style="flex:1;justify-content:center">
+            Invia link
+          </button>
+          <button class="btn btn-ghost btn-sm" id="reset-cancel-btn">Annulla</button>
+        </div>
+      </div>
+
       <div style="margin-top:20px;text-align:center">
         <a href="index.html" style="font-size:13px;color:var(--text2);text-decoration:none;">
           ← Torna alla home
