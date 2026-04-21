@@ -3,102 +3,302 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fantadraft – Fantacalcio Manageriale</title>
-  <meta name="description" content="Fantacalcio manageriale con draft, salary cap e modalità Mantra">
+  <title>Fantadraft – Fantacalcio Manageriale Mantra</title>
+  <meta name="description" content="Fantadraft è il fantacalcio manageriale con Draft, Salary Cap, contratti pluriennali e modalità Mantra. Crea la tua lega privata e sfida i tuoi amici.">
   <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+  <style>
+    /* ── LANDING STYLES ──────────────────────────── */
+    .land-nav {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0 32px; height:68px;
+      background:rgba(13,15,26,.94); backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--border);
+      position:sticky; top:0; z-index:100;
+      box-shadow:0 4px 30px rgba(0,0,0,.5);
+    }
+    .land-nav-logo { font-family:'Outfit',sans-serif; font-size:24px; font-weight:900; color:var(--accent); letter-spacing:-0.5px; }
+    .land-nav-right { display:flex; align-items:center; gap:12px; }
+    .land-nav-link { font-size:14px; font-weight:600; color:var(--text2); background:none; border:none; cursor:pointer; padding:8px 12px; border-radius:8px; transition:color .2s; text-decoration:none; }
+    .land-nav-link:hover { color:var(--text); }
+
+    .land-hero {
+      position:relative; overflow:hidden;
+      padding:100px 32px 90px;
+      text-align:center;
+      background:linear-gradient(-45deg,#0d0f1a,#151829,#0a0c18,#12151f);
+      background-size:400% 400%; animation:gradBG 12s ease infinite;
+      border-bottom:1px solid var(--border);
+    }
+    @keyframes gradBG { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+    .land-hero::before { content:''; position:absolute; inset:0; background:url("data:image/svg+xml,%3Csvg width='20' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='1' fill='rgba(255,255,255,0.04)'/%3E%3C/svg%3E"); pointer-events:none; }
+    .land-hero::after { content:'⚽'; position:absolute; right:-40px; top:-40px; font-size:300px; opacity:.04; line-height:1; transform:rotate(-15deg); pointer-events:none; }
+    .land-hero-inner { position:relative; max-width:760px; margin:0 auto; }
+    .land-hero-badge { display:inline-block; background:rgba(245,197,24,.1); border:1px solid rgba(245,197,24,.3); color:var(--accent); font-size:11px; font-weight:700; letter-spacing:2px; padding:5px 18px; border-radius:20px; margin-bottom:28px; text-transform:uppercase; }
+    .land-hero h1 { font-family:'Outfit',sans-serif; font-size:clamp(46px,9vw,82px); font-weight:900; letter-spacing:-2px; line-height:1; margin-bottom:14px; background:linear-gradient(135deg,#fff 0%,var(--accent) 65%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+    .land-hero h2 { font-family:'Outfit',sans-serif; font-size:clamp(13px,2vw,17px); font-weight:600; color:var(--text2); letter-spacing:3px; text-transform:uppercase; margin-bottom:28px; }
+    .land-hero p { color:var(--text2); font-size:16px; line-height:1.8; margin-bottom:44px; max-width:580px; margin-inline:auto; }
+    .land-hero-btns { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
+
+    .btn-hero-primary { display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:#000; font-family:'Outfit',sans-serif; font-size:16px; font-weight:800; padding:15px 34px; border-radius:10px; border:none; cursor:pointer; transition:all .2s; text-decoration:none; box-shadow:0 0 30px rgba(245,197,24,.2); }
+    .btn-hero-primary:hover { background:var(--accent2); transform:translateY(-2px); box-shadow:0 0 44px rgba(245,197,24,.38); }
+    .btn-hero-secondary { display:inline-flex; align-items:center; gap:8px; background:rgba(255,255,255,.06); color:var(--text); font-family:'Outfit',sans-serif; font-size:16px; font-weight:700; padding:15px 34px; border-radius:10px; border:1px solid rgba(255,255,255,.12); cursor:pointer; transition:all .2s; text-decoration:none; }
+    .btn-hero-secondary:hover { background:rgba(255,255,255,.1); transform:translateY(-2px); }
+
+    .land-stats { display:flex; justify-content:center; flex-wrap:wrap; background:var(--bg2); border-bottom:1px solid var(--border); }
+    .land-stat { flex:1; min-width:130px; max-width:200px; padding:28px 16px; text-align:center; border-right:1px solid var(--border); }
+    .land-stat:last-child { border-right:none; }
+    .land-stat-num { font-family:'Outfit',sans-serif; font-size:34px; font-weight:900; color:var(--accent); }
+    .land-stat-label { font-size:11px; color:var(--text2); margin-top:5px; text-transform:uppercase; letter-spacing:1px; }
+
+    .land-section { max-width:1200px; margin:0 auto; padding:80px 32px; }
+    .land-section-badge { font-family:'Outfit',sans-serif; font-size:12px; font-weight:700; color:var(--accent); letter-spacing:3px; text-transform:uppercase; margin-bottom:14px; }
+    .land-section-title { font-family:'Outfit',sans-serif; font-size:clamp(26px,4vw,40px); font-weight:800; color:var(--text); margin-bottom:48px; line-height:1.2; }
+    .land-section-title span { color:var(--accent); }
+
+    .features-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+    .feature-card { background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:14px; padding:28px 24px; transition:border-color .2s, transform .2s; }
+    .feature-card:hover { border-color:rgba(245,197,24,.25); transform:translateY(-3px); }
+    .feature-icon { font-size:36px; margin-bottom:16px; }
+    .feature-card h3 { font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; color:var(--text); margin-bottom:10px; }
+    .feature-card p { color:var(--text2); font-size:14px; line-height:1.7; }
+
+    .how-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:24px; }
+    .how-step { text-align:center; padding:20px 12px; }
+    .how-num { width:50px; height:50px; border-radius:50%; background:rgba(245,197,24,.1); border:2px solid rgba(245,197,24,.3); color:var(--accent); font-family:'Outfit',sans-serif; font-size:22px; font-weight:900; display:flex; align-items:center; justify-content:center; margin:0 auto 18px; }
+    .how-step h3 { font-family:'Outfit',sans-serif; font-size:16px; font-weight:700; color:var(--text); margin-bottom:8px; }
+    .how-step p { font-size:13px; color:var(--text2); line-height:1.65; }
+
+    .cap-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+    .cap-card { border-radius:14px; padding:24px 20px; border:1px solid; text-align:center; }
+    .cap-card.cc-cap { background:rgba(34,197,94,.06); border-color:rgba(34,197,94,.25); }
+    .cap-card.cc-soft { background:rgba(249,115,22,.06); border-color:rgba(249,115,22,.25); }
+    .cap-card.cc-hard { background:rgba(239,68,68,.06); border-color:rgba(239,68,68,.25); }
+    .cap-card.cc-luxury { background:rgba(168,85,247,.06); border-color:rgba(168,85,247,.25); }
+    .cap-card-label { font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin-bottom:10px; }
+    .cc-cap .cap-card-label { color:var(--green); }
+    .cc-soft .cap-card-label { color:var(--orange); }
+    .cc-hard .cap-card-label { color:var(--red); }
+    .cc-luxury .cap-card-label { color:var(--purple); }
+    .cap-card-range { font-family:'Outfit',sans-serif; font-size:22px; font-weight:800; color:var(--text); margin-bottom:8px; }
+    .cap-card-desc { font-size:12px; color:var(--text2); line-height:1.55; }
+
+    .land-cta { background:linear-gradient(135deg,rgba(245,197,24,.08) 0%,rgba(245,197,24,.02) 100%); border-top:1px solid rgba(245,197,24,.15); border-bottom:1px solid rgba(245,197,24,.15); text-align:center; padding:80px 32px; }
+    .land-cta h2 { font-family:'Outfit',sans-serif; font-size:clamp(28px,4vw,46px); font-weight:900; color:var(--text); margin-bottom:16px; }
+    .land-cta p { color:var(--text2); font-size:16px; margin-bottom:40px; }
+
+    .land-footer { background:var(--bg2); border-top:1px solid var(--border); padding:40px 32px 24px; text-align:center; }
+    .land-footer-logo { font-family:'Outfit',sans-serif; font-size:20px; font-weight:900; color:var(--accent); margin-bottom:16px; }
+    .land-footer-links { display:flex; justify-content:center; gap:24px; flex-wrap:wrap; margin-bottom:20px; }
+    .land-footer-links a { font-size:13px; color:var(--text2); text-decoration:none; transition:color .2s; }
+    .land-footer-links a:hover { color:var(--accent); }
+    .land-footer-copy { font-size:12px; color:var(--text3); line-height:1.75; }
+
+    .land-divider { border:none; border-top:1px solid var(--border); margin:0; }
+
+    @media(max-width:900px) {
+      .features-grid { grid-template-columns:1fr 1fr; }
+      .how-grid { grid-template-columns:1fr 1fr; }
+      .cap-grid { grid-template-columns:1fr 1fr; }
+      .land-section { padding:56px 20px; }
+    }
+    @media(max-width:600px) {
+      .features-grid { grid-template-columns:1fr; }
+      .how-grid { grid-template-columns:1fr; }
+      .cap-grid { grid-template-columns:1fr 1fr; }
+      .land-nav { padding:0 16px; }
+      .land-hero { padding:64px 20px 56px; }
+      .land-hero::after { display:none; }
+      .land-stat { min-width:50%; border-bottom:1px solid var(--border); }
+      .land-cta { padding:56px 20px; }
+      .land-footer { padding:28px 16px 20px; }
+      .land-footer-links { gap:16px; }
+    }
+  </style>
 </head>
-<body>
+<body style="background:var(--bg);">
 
-<!-- ══ LOGIN PAGE ══════════════════════════════════════ -->
-<div id="login-page">
-  <div class="login-box">
-
-    <div class="login-logo">
-      <div class="logo-text">FANTADRAFT</div>
-      <div class="logo-sub">Fantacalcio Manageriale · Mantra · Draft</div>
-    </div>
-
-    <div class="card">
-      <div class="login-tabs">
-        <button class="login-tab active" data-mode="login">Accedi</button>
-        <button class="login-tab" data-mode="register">Registrati</button>
-      </div>
-
-      <form class="login-form" id="auth-form">
-        <div class="form-group hidden" id="field-displayname">
-          <label class="form-label">Nome Manager</label>
-          <input class="form-input" id="auth-displayname" type="text" placeholder="Es. Lorenzo">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Email</label>
-          <input class="form-input" id="auth-email" type="email" placeholder="email@esempio.it" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Password</label>
-          <input class="form-input" id="auth-password" type="password" placeholder="••••••••" required minlength="6">
-        </div>
-        <div id="auth-error" class="form-error"></div>
-        <button class="btn btn-primary btn-lg" id="auth-submit-btn" type="submit" style="width:100%;justify-content:center">
-          Accedi
-        </button>
-      </form>
-    </div>
-
+<!-- ══ NAVBAR ══════════════════════════════════════════════ -->
+<nav class="land-nav">
+  <div class="land-nav-logo">FANTADRAFT</div>
+  <div class="land-nav-right">
+    <a href="app.html" class="land-nav-link">Accedi</a>
+    <a href="app.html" class="btn-hero-primary" style="font-size:13px;padding:9px 22px;">Inizia gratis →</a>
   </div>
+</nav>
+
+<!-- ══ HERO ════════════════════════════════════════════════ -->
+<section class="land-hero">
+  <div class="land-hero-inner">
+    <div class="land-hero-badge">🏆 Fantacalcio Manageriale · Modalità Mantra · Draft</div>
+    <h1>FANTADRAFT</h1>
+    <h2>Serie A · Draft · Salary Cap · Contratti</h2>
+    <p>
+      Il fantacalcio che hai sempre voluto. Draft NBA-style, salary cap, contratti
+      pluriennali, Lottery anti-tanking e voti live da Sofascore.
+      Crea la tua lega privata e sfida i tuoi amici per tutta la stagione.
+    </p>
+    <div class="land-hero-btns">
+      <a href="app.html" class="btn-hero-primary">⚽ Crea la tua lega</a>
+      <a href="app.html" class="btn-hero-secondary">🔗 Unisciti a una lega</a>
+    </div>
+  </div>
+</section>
+
+<!-- ══ STATS ═══════════════════════════════════════════════ -->
+<div class="land-stats">
+  <div class="land-stat"><div class="land-stat-num">320</div><div class="land-stat-label">FM Salary Cap</div></div>
+  <div class="land-stat"><div class="land-stat-num">38</div><div class="land-stat-label">Giornate Serie A</div></div>
+  <div class="land-stat"><div class="land-stat-num">2</div><div class="land-stat-label">Draft a stagione</div></div>
+  <div class="land-stat"><div class="land-stat-num">30</div><div class="land-stat-label">Giocatori in rosa</div></div>
+  <div class="land-stat"><div class="land-stat-num">100%</div><div class="land-stat-label">Gratuito</div></div>
 </div>
 
-<!-- ══ APP SHELL ═══════════════════════════════════════ -->
-<div id="app" class="hidden">
+<hr class="land-divider">
 
-  <!-- NAVBAR -->
-  <nav id="navbar">
-    <div class="navbar-top">
-      <div class="navbar-logo">
-        FANTADRAFT
-        <span class="league-label hidden" id="navbar-league-label"></span>
-      </div>
-      <div class="navbar-right">
-        <div id="league-switcher-wrap"></div>
-        <span class="navbar-user" id="navbar-username"></span>
-        <button class="btn btn-ghost btn-sm" id="logout-btn">Esci</button>
-      </div>
+<!-- ══ FEATURES ════════════════════════════════════════════ -->
+<section class="land-section">
+  <div class="land-section-badge">Le funzionalità</div>
+  <div class="land-section-title">Tutto quello che serve per una <span>lega seria</span></div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">📝</div>
+      <h3>Draft</h3>
+      <p>Due Draft a stagione — estivo e di riparazione. L'ordine del primo giro è determinato dalla Lottery. I giri successivi seguono l'ordine inverso della classifica. Le scelte future si possono scambiare.</p>
     </div>
-
-    <!-- TABS — nascosti finché non c'è una lega -->
-    <div class="navbar-tabs hidden" id="navbar-tabs">
-      <button class="nav-tab active" data-tab="home">🏠 Home</button>
-      <button class="nav-tab" data-tab="calendario">📅 Calendario</button>
-      <button class="nav-tab" data-tab="classifica">🏆 Classifica</button>
-      <button class="nav-tab" data-tab="formazioni">📋 Formazioni</button>
-      <button class="nav-tab" data-tab="rose">🌹 Rose</button>
-      <button class="nav-tab" data-tab="cap">💰 CAP</button>
-      <button class="nav-tab" data-tab="scambi">🔄 Scambi</button>
-      <button class="nav-tab" data-tab="playoff">🥊 Playoff</button>
-      <button class="nav-tab" data-tab="lottery">🎰 Lottery</button>
-      <button class="nav-tab" data-tab="draft">📝 Draft</button>
-      <button class="nav-tab" data-tab="regolamento">📖 Regolamento</button>
+    <div class="feature-card">
+      <div class="feature-icon">💰</div>
+      <h3>Salary Cap</h3>
+      <p>Sistema a 4 livelli ispirato all'NBA: Cap Standard (320 FM), Soft Cap, Hard Cap e Luxury Tax. Ogni livello ha regole di mercato diverse e penalità per chi sfora.</p>
     </div>
-  </nav>
-
-  <!-- PAGE CONTENT -->
-  <div id="page-content">
-
-    <div id="tab-home"        class="tab-section active"></div>
-    <div id="tab-calendario"  class="tab-section"></div>
-    <div id="tab-classifica"  class="tab-section"></div>
-    <div id="tab-formazioni"  class="tab-section"></div>
-    <div id="tab-rose"        class="tab-section"></div>
-    <div id="tab-cap"         class="tab-section"></div>
-    <div id="tab-scambi"      class="tab-section"></div>
-    <div id="tab-playoff"     class="tab-section"></div>
-    <div id="tab-lottery"     class="tab-section"></div>
-    <div id="tab-draft"       class="tab-section"></div>
-    <div id="tab-regolamento" class="tab-section"></div>
-
+    <div class="feature-card">
+      <div class="feature-icon">📋</div>
+      <h3>Contratti pluriennali</h3>
+      <p>Firma i giocatori per 1–3 anni. Il costo cresce del 30% al secondo anno e del 20% al terzo. Under 21 hanno incrementi ridotti. C'è anche la clausola Giocatore Bandiera.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🎰</div>
+      <h3>Lottery anti-tanking</h3>
+      <p>Le squadre 4°–10° partecipano con probabilità pesate e un sistema anti-tanking sui FantaPunti totali. Non basta arrivare ultimi: devi essere competitivo fino in fondo.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔄</div>
+      <h3>Mercato scambi</h3>
+      <p>Scambia giocatori e scelte draft con gli altri manager. Le regole dipendono dal livello di cap. In Luxury Tax non si può scambiare. Consentiti scambi a 3–4 vie.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🥊</div>
+      <h3>Playoff</h3>
+      <p>GW35–GW38. Turno preliminare per il 7°–10°, poi tabellone da 8 squadre. Fattore campo +2 nel preliminare. Sfide in gara secca su una giornata di Serie A.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📅</div>
+      <h3>Calendario flessibile</h3>
+      <p>La Regular Season può iniziare dalla GW1 alla GW10 e termina sempre alla GW34. Manager, parametri e salary cap sono tutti configurabili dal commissioner.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚽</div>
+      <h3>Modalità Mantra</h3>
+      <p>Ruoli e moduli del sistema Mantra standard. I voti sono quelli di Sofascore, aggiornati in tempo reale durante le partite grazie al nostro proxy automatico.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🌹</div>
+      <h3>Rose fino a 30</h3>
+      <p>Ogni manager gestisce una rosa da 23 a 30 giocatori con almeno 2 portieri. Panchina da 12, 5 sostituzioni modalità Master. Nessun vincolo numerico per ruolo.</p>
+    </div>
   </div>
-</div>
+</section>
 
-<script type="module" src="app.js"></script>
+<hr class="land-divider">
+
+<!-- ══ COME FUNZIONA ═══════════════════════════════════════ -->
+<section class="land-section">
+  <div class="land-section-badge">Come funziona</div>
+  <div class="land-section-title">Inizia in <span>4 passi</span></div>
+  <div class="how-grid">
+    <div class="how-step">
+      <div class="how-num">1</div>
+      <h3>Crea la lega</h3>
+      <p>Registrati, dai un nome alla lega e imposta i parametri: numero manager, GW di inizio, salary cap.</p>
+    </div>
+    <div class="how-step">
+      <div class="how-num">2</div>
+      <h3>Invita i manager</h3>
+      <p>Condividi il codice lega. Ogni amico crea il suo account e si unisce con il nome della sua squadra.</p>
+    </div>
+    <div class="how-step">
+      <div class="how-num">3</div>
+      <h3>Fai il Draft</h3>
+      <p>La Lottery determina l'ordine del primo giro. Ogni manager sceglie i giocatori liberi e firma i contratti.</p>
+    </div>
+    <div class="how-step">
+      <div class="how-num">4</div>
+      <h3>Gioca!</h3>
+      <p>Schiera la formazione ogni giornata, gestisci scambi e svincoli, guarda i voti in tempo reale.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="land-divider">
+
+<!-- ══ SALARY CAP ══════════════════════════════════════════ -->
+<section class="land-section">
+  <div class="land-section-badge">Salary Cap</div>
+  <div class="land-section-title">Quattro livelli, <span>regole diverse</span></div>
+  <div class="cap-grid">
+    <div class="cap-card cc-cap">
+      <div class="cap-card-label">✓ Cap Standard</div>
+      <div class="cap-card-range">≤ 320 FM</div>
+      <div class="cap-card-desc">Nessuna limitazione. Scambi liberi senza vincoli di costo.</div>
+    </div>
+    <div class="cap-card cc-soft">
+      <div class="cap-card-label">Soft Cap</div>
+      <div class="cap-card-range">321–340 FM</div>
+      <div class="cap-card-desc">Raggiungibile solo via scambi. Nessuna penalità o limitazione di mercato.</div>
+    </div>
+    <div class="cap-card cc-hard">
+      <div class="cap-card-label">Hard Cap</div>
+      <div class="cap-card-range">341–360 FM</div>
+      <div class="cap-card-desc">Scambi consentiti con differenza massima di 10 FM tra i giocatori coinvolti.</div>
+    </div>
+    <div class="cap-card cc-luxury">
+      <div class="cap-card-label">Luxury Tax</div>
+      <div class="cap-card-range">361+ FM</div>
+      <div class="cap-card-desc">Nessuno scambio. Perdita di scelte al Draft. Obbligo di rientrare a 340 FM.</div>
+    </div>
+  </div>
+</section>
+
+<hr class="land-divider">
+
+<!-- ══ CTA ═════════════════════════════════════════════════ -->
+<section class="land-cta">
+  <h2>Pronto a dominare la lega?</h2>
+  <p>Crea il tuo account gratis, configura la lega e invita i tuoi amici. Il Draft ti aspetta.</p>
+  <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
+    <a href="app.html" class="btn-hero-primary" style="font-size:17px;padding:16px 42px;">⚽ Crea la tua lega gratis</a>
+  </div>
+  <p style="margin-top:20px;font-size:12px;color:var(--text3);">Nessuna carta di credito. Nessuna pubblicità. Solo fantacalcio.</p>
+</section>
+
+<!-- ══ FOOTER ══════════════════════════════════════════════ -->
+<footer class="land-footer">
+  <div class="land-footer-logo">FANTADRAFT</div>
+  <div class="land-footer-links">
+    <a href="app.html">Accedi</a>
+    <a href="privacy.html">Privacy Policy</a>
+    <a href="cookie-policy.html">Cookie Policy</a>
+    <a href="termini.html">Termini e Condizioni</a>
+  </div>
+  <div class="land-footer-copy">
+    ⚽ Fantadraft – Gioco gratuito a scopo puramente ricreativo e non commerciale.<br>
+    © 2026 Lorenzo Simonazzi — Tutti i diritti riservati sul codice e sui contenuti originali di fantadraft.it.<br>
+    I voti e le statistiche sono forniti da Sofascore. I nomi, i loghi e i marchi relativi alla Serie A, alle squadre e ai calciatori appartengono ai rispettivi titolari.
+  </div>
+</footer>
+
 </body>
 </html>

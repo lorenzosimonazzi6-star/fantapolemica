@@ -14,6 +14,15 @@ import {
   capLevelLabel, capLevelBadgeClass,
 } from "./firebase.js";
 
+import { renderRose       as _renderRose       } from "./rose.js";
+import { renderCap        as _renderCap        } from "./cap.js";
+import { renderCalendario as _renderCalendario, destroyCalendario } from "./calendario.js";
+import { renderFormazioni as _renderFormazioni } from "./formazioni.js";
+import { renderClassifica as _renderClassifica } from "./classifica.js";
+import { renderScambi     as _renderScambi     } from "./scambi.js";
+import { renderPlayoff    as _renderPlayoff    } from "./playoff.js";
+import { renderLottery    as _renderLottery    } from "./lottery.js";
+
 // ── STATE ───────────────────────────────────────
 let currentUser      = null;
 let currentProfile   = null;
@@ -395,14 +404,14 @@ function renderHome() {
 }
 
 // ── PLACEHOLDER TAB RENDERS ──────────────────────
-function renderCalendario()  { placeholderTab("calendario",  "📅", "Calendario",  "Giornate e sfide della stagione"); }
-function renderClassifica()  { placeholderTab("classifica",  "🏆", "Classifica",  "Regular Season standings"); }
-function renderFormazioni()  { placeholderTab("formazioni",  "📋", "Formazioni",  "Schiera la tua formazione"); }
-function renderRose()        { placeholderTab("rose",        "🌹", "Rose",        "Rosa giocatori di ogni squadra"); }
-function renderCap()         { placeholderTab("cap",         "💰", "CAP",         "Salary Cap e budget squadra"); }
-function renderScambi()      { placeholderTab("scambi",      "🔄", "Scambi",      "Proponi e gestisci gli scambi"); }
-function renderPlayoff()     { placeholderTab("playoff",     "🥊", "Playoff",     "Tabellone playoff"); }
-function renderLottery()     { placeholderTab("lottery",     "🎰", "Lottery",     "Estrazione ordine Draft"); }
+function renderCalendario()  { if (!currentLeague) return; destroyCalendario(); _renderCalendario(currentLeagueId, currentLeague, currentUser); }
+function renderClassifica()  { if (!currentLeague) return; _renderClassifica(currentLeagueId, currentLeague, currentUser); }
+function renderFormazioni()  { if (!currentLeague) return; _renderFormazioni(currentLeagueId, currentLeague, currentUser); }
+function renderRose()        { if (!currentLeague) return; _renderRose(currentLeagueId, currentLeague, currentUser); }
+function renderCap()         { if (!currentLeague) return; _renderCap(currentLeagueId, currentLeague, currentUser); }
+function renderScambi()      { if (!currentLeague) return; _renderScambi(currentLeagueId, currentLeague, currentUser); }
+function renderPlayoff()     { if (!currentLeague) return; _renderPlayoff(currentLeagueId, currentLeague, currentUser); }
+function renderLottery()     { if (!currentLeague) return; _renderLottery(currentLeagueId, currentLeague, currentUser); }
 function renderDraft()       { placeholderTab("draft",       "📝", "Draft",       "Draft dei giocatori liberi"); }
 function renderRegolamento() { placeholderTab("regolamento", "📖", "Regolamento", "Regole complete della lega"); }
 

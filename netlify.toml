@@ -7,7 +7,4 @@
   [headers.values]
     Access-Control-Allow-Origin = "*"
 
-[[redirects]]
-  from = "/app/*"
-  to = "/index.html"
-  status = 200
+
