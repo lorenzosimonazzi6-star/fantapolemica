@@ -42,8 +42,7 @@ export const db   = getDatabase(app);
 // UID dell'account superadmin (Lorenzo) — hardcoded come in fanta-seriea.it
 // Per trovare il tuo UID: Firebase Console → Authentication → Users
 export const SUPERADMIN_UIDS = new Set([
-  // Aggiungi qui il tuo UID Firebase dopo il primo login
-  // es: "abc123def456"
+  A7cmWVw9XHnbbsXtSVxpbw39sZln2
 ]);
 
 export function isSuperAdmin(uid) {
