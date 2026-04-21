@@ -565,7 +565,7 @@ function kpi(icon, label, value, color) {
 }
 
 // ── EVENTS ────────────────────────────────────────
-function bindAdminEvents(leagueId, league, teams, settings, schedule, draftState) {
+async function bindAdminEvents(leagueId, league, teams, settings, schedule, draftState) {
 
   // Accordion
   document.getElementById("tab-admin")?.addEventListener("click", e => {
