@@ -165,6 +165,7 @@ function renderTab(tab) {
     case "lottery":     renderLottery();     break;
     case "draft":       renderDraft();       break;
     case "regolamento": renderRegolamento(); break;
+    case "admin":       renderAdmin();       break;
   }
 }
 
@@ -178,10 +179,20 @@ async function loadLeague() {
   }
 
   stopLeagueListener();
+
+  // Prima lettura completa per avere dati subito
+  const snap = await get(ref(db, `leagues/${currentLeagueId}`));
+  currentLeague = snap.val();
+  renderNavbarLeague();
+  renderTab(getCurrentTab());
+
+  // Poi ascolta aggiornamenti in tempo reale
   leagueListener = onValue(ref(db, `leagues/${currentLeagueId}`), (snap) => {
     currentLeague = snap.val();
     renderNavbarLeague();
-    renderTab(getCurrentTab());
+    // Re-render solo se la tab è già visibile (evita doppio render all'avvio)
+    const activeTab = getCurrentTab();
+    if (activeTab !== "home") renderTab(activeTab);
   });
 }
 
