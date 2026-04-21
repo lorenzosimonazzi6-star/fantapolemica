@@ -7,16 +7,16 @@ import { db, ref, get, set, update, onValue, off } from "./firebase.js";
 import { SERIE_A_MATCHES } from "./matches.js";
 import { fpToGoals, normalizeName } from "./utils.js";
 
-// ── BONUS/MALUS MANTRA ────────────────────────────
-const BONUS_GOL    = { P:5.5, D:5.5, Dc:5.5, Dd:5.5, Ds:5.5, B:5.5, E:4.5, M:4.5, Mf:4.5, C:4.5, T:4.5, W:3.5, A:3, Att:3, Pc:3, Tr:3 };
-const BONUS_ASSIST = { P:2, D:2, Dc:2, Dd:2, Ds:2, B:1.5, E:1.5, M:1.5, Mf:1.5, C:1.5, T:1.5, W:1, A:1, Att:1, Pc:1, Tr:1 };
-const MALUS_AMM    = 0.5;
-const MALUS_ESP    = 1;
-const MALUS_AUT    = 2;
-const MALUS_RIG    = 3;
-const BONUS_PI     = 2;   // porta inviolata portiere
-const BONUS_RIG_PAR = 3;  // rigore parato portiere
-const MALUS_GS     = 1;   // gol subito portiere
+// ── BONUS/MALUS (uguali per tutti i ruoli) ────────
+const BONUS_GOL     = 3;    // +3 per ogni gol (tutti i ruoli, anche su rigore)
+const BONUS_ASSIST  = 1;    // +1 per assist
+const BONUS_PI      = 1;    // +1 porta inviolata (solo portiere)
+const BONUS_RIG_PAR = 3;    // +3 rigore parato (solo portiere)
+const MALUS_GS      = 1;    // -1 per ogni gol subito (solo portiere)
+const MALUS_AMM     = 0.5;  // -0.5 ammonizione
+const MALUS_ESP     = 1;    // -1 espulsione
+const MALUS_AUT     = 2;    // -2 autogol
+const MALUS_RIG     = 3;    // -3 rigore sbagliato
 
 // ── STATE ────────────────────────────────────────
 let _leagueId    = null;
@@ -340,31 +340,20 @@ function buildFlagsStr(flags) {
 function calcPlayerFP(voto, roles, flags) {
   if (voto == null) return null;
   const role = (roles || [])[0] || "C";
+  const isPor = role === "Por" || role === "P";
   let fp = voto;
 
-  // Gol
-  if (flags.gol) {
-    const bonusGol = BONUS_GOL[role] ?? BONUS_GOL["C"];
-    fp += flags.gol * bonusGol;
-  }
-  // Assist
-  if (flags.assist) {
-    const bonusAss = BONUS_ASSIST[role] ?? BONUS_ASSIST["C"];
-    fp += flags.assist * bonusAss;
-  }
-  // Autogol
-  if (flags.aut)   fp -= flags.aut * MALUS_AUT;
-  // Ammonizione
-  if (flags.amm)   fp -= MALUS_AMM;
-  // Espulsione
-  if (flags.esp)   fp -= MALUS_ESP;
-  // Rigore sbagliato
-  if (flags.rig)   fp -= MALUS_RIG;
-  // Portiere specifici
-  if (role === "Por" || role === "P") {
+  if (flags.gol)    fp += flags.gol    * BONUS_GOL;
+  if (flags.assist) fp += flags.assist * BONUS_ASSIST;
+  if (flags.aut)    fp -= flags.aut    * MALUS_AUT;
+  if (flags.amm)    fp -= MALUS_AMM;
+  if (flags.esp)    fp -= MALUS_ESP;
+  if (flags.rig)    fp -= MALUS_RIG;
+
+  if (isPor) {
     if (flags.pi)     fp += BONUS_PI;
     if (flags.rigpar) fp += flags.rigpar * BONUS_RIG_PAR;
-    if (flags.gs)     fp -= flags.gs * MALUS_GS;
+    if (flags.gs)     fp -= flags.gs     * MALUS_GS;
   }
 
   return Math.round(fp * 10) / 10;
@@ -513,4 +502,190 @@ function bindMatchCardEvents(gw, teams, teamFP) {
       setTimeout(() => { btn.textContent = "📊 Voti"; btn.disabled = false; }, 2000);
     });
   });
+}
+
+// ── CALCOLA E SALVA SCORES DI UNA GIORNATA ────────
+/**
+ * Calcola i FP finali di ogni team per una giornata,
+ * li salva in scores/{teamId}/{gw}, poi calcola il
+ * risultato di ogni scontro diretto (FP → gol → W/D/L)
+ * e aggiorna la classifica dei team.
+ */
+export async function calcAndSaveGwScores(leagueId, league, gw) {
+  const teams    = Object.values(league.teams || {});
+  const settings = league.settings || {};
+  const schedule = league.schedule || {};
+  const gwMatches = (schedule[String(gw)] || []);
+
+  // Carica voti e formazioni in parallelo
+  const [votiSnap, ...formSnaps] = await Promise.all([
+    get(ref(db, `leagues/${leagueId}/voti`)),
+    ...teams.map(t => get(ref(db, `leagues/${leagueId}/formations/${t.id}/${gw}`))),
+  ]);
+
+  const voti = votiSnap.val() || {};
+
+  // ── STEP 1: calcola FP per ogni team ──────────────
+  const fpByTeam = {};
+
+  for (let i = 0; i < teams.length; i++) {
+    const team      = teams[i];
+    const formation = formSnaps[i].val();
+
+    let titolari = Object.values(formation?.titolari || {});
+    let panchina = Object.values(formation?.panchina  || {});
+
+    // Usa ultima formazione salvata se mancante
+    if (!titolari.length) {
+      for (let prevGw = gw - 1; prevGw >= (settings.gwStart || 1); prevGw--) {
+        const prevSnap = await get(ref(db, `leagues/${leagueId}/formations/${team.id}/${prevGw}`));
+        const prevFm   = prevSnap.val();
+        if (prevFm?.titolari && Object.keys(prevFm.titolari).length > 0) {
+          titolari = Object.values(prevFm.titolari);
+          panchina = Object.values(prevFm.panchina || {});
+          break;
+        }
+      }
+    }
+
+    let totalFP  = 0;
+    let hasAny   = false;
+    let subsMade = 0;
+    const MAX_SUBS = 5;
+
+    const titolariConFP = titolari.map(player => {
+      const gwVoti = ((voti[player.team] || {})[String(gw)]) || {};
+      const entry  = lookupVotoGw(gwVoti, player.name);
+      if (!entry || entry.sv) return { player, fp: null, sv: entry?.sv || false };
+      return { player, fp: calcPlayerFP(entry.v, player.roles || [], entry.flags || {}), sv: false };
+    });
+
+    for (const { player, fp, sv } of titolariConFP) {
+      if (sv || fp === null) {
+        if (subsMade < MAX_SUBS) {
+          for (const sub of panchina) {
+            if (sub._used) continue;
+            const gwVoti  = ((voti[sub.team] || {})[String(gw)]) || {};
+            const subEntry = lookupVotoGw(gwVoti, sub.name);
+            if (!subEntry || subEntry.sv) continue;
+            const subFP = calcPlayerFP(subEntry.v, sub.roles || [], subEntry.flags || {});
+            if (subFP !== null) {
+              totalFP += subFP; hasAny = true; subsMade++; sub._used = true; break;
+            }
+          }
+        }
+      } else {
+        totalFP += fp; hasAny = true;
+      }
+    }
+
+    const finalFP = hasAny ? Math.round(totalFP * 10) / 10 : null;
+    fpByTeam[team.id] = finalFP;
+
+    if (finalFP !== null) {
+      await set(ref(db, `leagues/${leagueId}/scores/${team.id}/${gw}`), {
+        fp: finalFP, calculatedAt: Date.now(), subsMade,
+      });
+    }
+  }
+
+  // ── STEP 2: calcola risultati scontri diretti ──────
+  const matchResults = {}; // { teamId: { pts, gf, gs, v, p, s } }
+  for (const team of teams) {
+    matchResults[team.id] = { pts: 0, gf: 0, gs: 0, v: 0, p: 0, s: 0 };
+  }
+
+  for (const match of gwMatches) {
+    const fpHome = fpByTeam[match.homeId];
+    const fpAway = fpByTeam[match.awayId];
+    if (fpHome === null || fpHome === undefined) continue;
+    if (fpAway === null || fpAway === undefined) continue;
+
+    const golHome = fpToGoals(fpHome);
+    const golAway = fpToGoals(fpAway);
+
+    // Aggiorna gol fatti/subiti
+    matchResults[match.homeId].gf += golHome;
+    matchResults[match.homeId].gs += golAway;
+    matchResults[match.awayId].gf += golAway;
+    matchResults[match.awayId].gs += golHome;
+
+    // Risultato
+    if (golHome > golAway) {
+      matchResults[match.homeId].v++;
+      matchResults[match.homeId].pts += 3;
+      matchResults[match.awayId].s++;
+    } else if (golAway > golHome) {
+      matchResults[match.awayId].v++;
+      matchResults[match.awayId].pts += 3;
+      matchResults[match.homeId].s++;
+    } else {
+      matchResults[match.homeId].p++;
+      matchResults[match.homeId].pts++;
+      matchResults[match.awayId].p++;
+      matchResults[match.awayId].pts++;
+    }
+
+    // Salva anche il risultato della singola sfida
+    await set(ref(db, `leagues/${leagueId}/matchResults/${gw}/${match.id}`), {
+      homeId: match.homeId, awayId: match.awayId,
+      fpHome, fpAway, golHome, golAway,
+      calculatedAt: Date.now(),
+    });
+  }
+
+  // ── STEP 3: aggiorna classifica cumulativa ─────────
+  // Legge la classifica esistente e aggiunge i punti di questa GW
+  // (evita di ricalcolare tutto da zero — somma incrementale)
+  const standingsSnap = await get(ref(db, `leagues/${leagueId}/standings`));
+  const standings     = standingsSnap.val() || {};
+
+  const updates = {};
+  for (const team of teams) {
+    const r    = matchResults[team.id];
+    const curr = standings[team.id] || { pts:0, v:0, p:0, s:0, gf:0, gs:0, fp:0 };
+
+    // Controlla se questa GW è già stata conteggiata
+    const gwLogSnap = await get(ref(db, `leagues/${leagueId}/standingsLog/${team.id}/${gw}`));
+    if (gwLogSnap.exists()) continue; // già calcolata, skip
+
+    const fpTotal = (curr.fp || 0) + (fpByTeam[team.id] || 0);
+    updates[`leagues/${leagueId}/standings/${team.id}`] = {
+      pts: (curr.pts || 0) + r.pts,
+      v:   (curr.v   || 0) + r.v,
+      p:   (curr.p   || 0) + r.p,
+      s:   (curr.s   || 0) + r.s,
+      gf:  (curr.gf  || 0) + r.gf,
+      gs:  (curr.gs  || 0) + r.gs,
+      fp:  Math.round(fpTotal * 10) / 10,
+    };
+    // Log per evitare doppio conteggio
+    updates[`leagues/${leagueId}/standingsLog/${team.id}/${gw}`] = {
+      pts: r.pts, v: r.v, p: r.p, s: r.s,
+      gf: r.gf, gs: r.gs, fp: fpByTeam[team.id] || 0,
+      calculatedAt: Date.now(),
+    };
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await update(ref(db), updates);
+  }
+
+  return fpByTeam;
+}
+
+// Lookup voto nella struttura {gw: {nome: entry}}
+function lookupVotoGw(gwVoti, nome) {
+  if (!gwVoti || !nome) return undefined;
+  if (gwVoti[nome]) return gwVoti[nome];
+  const norm = normalizeName(nome);
+  for (const [k, v] of Object.entries(gwVoti)) {
+    if (normalizeName(k) === norm) return v;
+  }
+  const tokens = norm.split(/\s+/).filter(t => t.length > 2);
+  for (const [k, v] of Object.entries(gwVoti)) {
+    const kTok = normalizeName(k).split(/\s+/);
+    if (tokens.some(t => kTok.includes(t))) return v;
+  }
+  return undefined;
 }

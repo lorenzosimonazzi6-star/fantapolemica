@@ -14,16 +14,22 @@ export async function renderClassifica(leagueId, league, user) {
   const teams   = Object.values(league.teams || {});
   const settings = league.settings || {};
 
-  // Carica tutti i risultati dal DB
-  const [scoresSnap, scheduleSnap] = await Promise.all([
+  // Legge standings salvati (calcolati dal poller/admin)
+  // con fallback al calcolo live da scores
+  const [standSnap, scoresSnap, scheduleSnap] = await Promise.all([
+    get(ref(db, `leagues/${leagueId}/standings`)),
     get(ref(db, `leagues/${leagueId}/scores`)),
     get(ref(db, `leagues/${leagueId}/schedule`)),
   ]);
-  const scores   = scoresSnap.val()   || {};
-  const schedule = scheduleSnap.val() || {};
 
-  // Calcola standings
-  const standings = calcStandings(teams, scores, schedule, settings);
+  const savedStandings = standSnap.val()   || {};
+  const scores         = scoresSnap.val()  || {};
+  const schedule       = scheduleSnap.val()|| {};
+
+  // Se esistono standings salvati usa quelli, altrimenti calcola live
+  const standings = Object.keys(savedStandings).length > 0
+    ? buildStandingsFromSaved(teams, savedStandings)
+    : calcStandings(teams, scores, schedule, settings);
 
   el.innerHTML = `
     <div class="page-header">
@@ -85,7 +91,28 @@ export async function renderClassifica(leagueId, league, user) {
   bindClassificaEvents(leagueId, league, teams, settings, scores, schedule, isAdmin);
 }
 
-// ── STANDINGS CALC ────────────────────────────────
+// ── STANDINGS DA FIREBASE (calcolati dal poller) ──
+function buildStandingsFromSaved(teams, savedStandings) {
+  return teams.map(team => {
+    const s = savedStandings[team.id] || {};
+    return {
+      team,
+      pt: s.pts || 0,
+      v:  s.v   || 0,
+      p:  s.p   || 0,
+      s:  s.s   || 0,
+      gf: s.gf  || 0,
+      gs: s.gs  || 0,
+      fp: s.fp  || 0,
+      capLevel:   team.capLevel   || "under",
+      capPenalty: team.capPenalty || 0,
+    };
+  }).sort((a,b) =>
+    (b.pt - a.pt) || (b.v - a.v) ||
+    ((b.gf - b.gs) - (a.gf - a.gs)) || (b.fp - a.fp)
+  );
+}
+
 function calcStandings(teams, scores, schedule, settings) {
   const map = {};
   for (const t of teams) {

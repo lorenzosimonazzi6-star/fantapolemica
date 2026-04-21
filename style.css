@@ -1031,3 +1031,27 @@ select.form-input { appearance: none; }
   margin-bottom:16px; display:flex; align-items:center; flex-wrap:wrap; gap:8px;
 }
 .contract-banner strong { color:var(--text); }
+
+/* ══════════════════════════════════════════════════
+   ADMIN PANEL
+══════════════════════════════════════════════════ */
+.nav-tab-admin { color: var(--accent) !important; }
+.nav-tab-admin.active { border-bottom-color: var(--accent); }
+
+.admin-sections { display: flex; flex-direction: column; gap: 8px; }
+
+.admin-acc-item {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden;
+}
+.admin-acc-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; cursor: pointer; font-size: 15px; font-weight: 700;
+  transition: background .15s; user-select: none;
+}
+.admin-acc-header:hover { background: rgba(255,255,255,.03); }
+.admin-acc-chevron { color: var(--text2); font-size: 12px; transition: transform .2s; }
+.admin-acc-body {
+  padding: 20px; border-top: 1px solid var(--border);
+  background: rgba(0,0,0,.1);
+}

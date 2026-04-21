@@ -22,6 +22,9 @@ import { renderClassifica as _renderClassifica } from "./classifica.js";
 import { renderScambi     as _renderScambi     } from "./scambi.js";
 import { renderPlayoff    as _renderPlayoff    } from "./playoff.js";
 import { renderLottery    as _renderLottery    } from "./lottery.js";
+import { renderDraft      as _renderDraft, destroyDraft } from "./draft.js";
+import { renderRegolamento as _renderRegolamento } from "./regolamento.js";
+import { renderAdmin       as _renderAdmin       } from "./admin.js";
 
 // ── STATE ───────────────────────────────────────
 let currentUser      = null;
@@ -120,6 +123,9 @@ function renderNavbarLeague() {
     label.textContent = `MANTRA · ${currentLeague.name}`;
     label.classList.remove("hidden");
     document.getElementById("navbar-tabs").classList.remove("hidden");
+    // Mostra tab Admin solo al commissioner
+    const isComm = currentLeague.commissionerUid === currentUser?.uid;
+    document.querySelector(".nav-tab-admin")?.classList.toggle("hidden", !isComm);
   } else {
     label.textContent = "";
     label.classList.add("hidden");
@@ -412,8 +418,9 @@ function renderCap()         { if (!currentLeague) return; _renderCap(currentLea
 function renderScambi()      { if (!currentLeague) return; _renderScambi(currentLeagueId, currentLeague, currentUser); }
 function renderPlayoff()     { if (!currentLeague) return; _renderPlayoff(currentLeagueId, currentLeague, currentUser); }
 function renderLottery()     { if (!currentLeague) return; _renderLottery(currentLeagueId, currentLeague, currentUser); }
-function renderDraft()       { placeholderTab("draft",       "📝", "Draft",       "Draft dei giocatori liberi"); }
-function renderRegolamento() { placeholderTab("regolamento", "📖", "Regolamento", "Regole complete della lega"); }
+function renderDraft()       { if (!currentLeague) return; destroyDraft(); _renderDraft(currentLeagueId, currentLeague, currentUser); }
+function renderRegolamento() { if (!currentLeague) return; _renderRegolamento(currentLeagueId, currentLeague, currentUser); }
+function renderAdmin()       { if (!currentLeague) return; _renderAdmin(currentLeagueId, currentLeague, currentUser); }
 
 function placeholderTab(id, icon, title, desc) {
   const el = document.getElementById(`tab-${id}`);

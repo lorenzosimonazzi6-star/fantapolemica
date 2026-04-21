@@ -7,4 +7,8 @@
   [headers.values]
     Access-Control-Allow-Origin = "*"
 
+# Poller voti — ogni 5 minuti
+[functions."scheduled-poller"]
+  schedule = "*/5 * * * *"
+
 
