@@ -3,7 +3,7 @@
 // Tab Calendario: giornate fantadraft, sfide, voti live
 // ============================================================
 
-import { db, ref, get, set, update, onValue, off } from "./firebase.js";
+import { db, ref, get, set, update, onValue, off, PATH_VOTI } from "./firebase.js";
 import { SERIE_A_MATCHES } from "./matches.js";
 import { fpToGoals, normalizeName } from "./utils.js";
 
@@ -391,7 +391,7 @@ async function getFormation(teamId, gw) {
 // ── VOTI LISTENER ─────────────────────────────────
 function _startVotiListener() {
   if (_votiListener) return;
-  const r = ref(db, `leagues/${_leagueId}/voti`);
+  const r = ref(db, PATH_VOTI);
   _votiListener = onValue(r, snap => {
     _votiCache = snap.val() || {};
     // Re-render giornata corrente se visibile
@@ -410,7 +410,7 @@ export async function fetchVotiSofascore(eventId, home, away, gw) {
     for (const side of ["home", "away"]) {
       const squadra = side === "home" ? home : away;
       for (const p of (data[side] || [])) {
-        const key = `leagues/${_leagueId}/voti/${squadra}/${gw}/${p.name.replace(/[.#$[\]]/g,"_")}`;
+        const key = `${PATH_VOTI}/${squadra}/${gw}/${p.name.replace(/[.#$[\]]/g,"_")}`;
         updates[key] = {
           v:      p.rating,
           sv:     p.didNotPlay,
@@ -519,7 +519,7 @@ export async function calcAndSaveGwScores(leagueId, league, gw) {
 
   // Carica voti e formazioni in parallelo
   const [votiSnap, ...formSnaps] = await Promise.all([
-    get(ref(db, `leagues/${leagueId}/voti`)),
+    get(ref(db, PATH_VOTI)),
     ...teams.map(t => get(ref(db, `leagues/${leagueId}/formations/${t.id}/${gw}`))),
   ]);
 

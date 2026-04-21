@@ -1,14 +1,11 @@
 [build]
   publish = "."
+  command = "npm install"
   functions = "netlify/functions"
 
 [[headers]]
   for = "/*"
   [headers.values]
     Access-Control-Allow-Origin = "*"
-
-# Poller voti — ogni 5 minuti
-[functions."scheduled-poller"]
-  schedule = "*/5 * * * *"
 
 

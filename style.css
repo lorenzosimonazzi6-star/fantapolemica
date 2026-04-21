@@ -1055,3 +1055,9 @@ select.form-input { appearance: none; }
   padding: 20px; border-top: 1px solid var(--border);
   background: rgba(0,0,0,.1);
 }
+
+/* ══════════════════════════════════════════════════
+   SUPERADMIN TAB
+══════════════════════════════════════════════════ */
+.nav-tab-superadmin { color: var(--red) !important; }
+.nav-tab-superadmin.active { border-bottom-color: var(--red); }

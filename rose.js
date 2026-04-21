@@ -3,7 +3,7 @@
 // Tab Rose: visualizza rose di tutti i manager + admin panel
 // ============================================================
 
-import { db, ref, get, set, push, update } from "./firebase.js";
+import { db, ref, get, set, push, update, PATH_DB_GIOCATORI } from "./firebase.js";
 import { parseCSVRose, roleBadge, roleColor, capLevelBadge, contractYearCost, calcAge } from "./utils.js";
 
 // ── STATE ────────────────────────────────────────
@@ -25,8 +25,8 @@ export async function renderRose(leagueId, league, user) {
 
   const el = document.getElementById("tab-rose");
 
-  // Carica giocatori del db della lega
-  const snap = await get(ref(db, `db_giocatori/${leagueId}`));
+  // Carica giocatori dal db GLOBALE
+  const snap = await get(ref(db, PATH_DB_GIOCATORI));
   _players = snap.val() || {};
 
   el.innerHTML = buildRoseHTML();

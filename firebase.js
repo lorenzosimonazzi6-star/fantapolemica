@@ -38,6 +38,22 @@ const app  = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db   = getDatabase(app);
 
+// ── SUPERADMIN ──────────────────────────────────
+// UID dell'account superadmin (Lorenzo) — hardcoded come in fanta-seriea.it
+// Per trovare il tuo UID: Firebase Console → Authentication → Users
+export const SUPERADMIN_UIDS = new Set([
+  // Aggiungi qui il tuo UID Firebase dopo il primo login
+  // es: "abc123def456"
+]);
+
+export function isSuperAdmin(uid) {
+  return SUPERADMIN_UIDS.has(uid);
+}
+
+// Path globali (condivisi tra tutte le leghe)
+export const PATH_DB_GIOCATORI = "db_giocatori/global";
+export const PATH_VOTI         = "voti"; // voti/{squadra}/{gw}/{nome}
+
 // ── RE-EXPORT Firebase helpers ──────────────────
 export {
   ref, set, get, push, update, onValue, off,

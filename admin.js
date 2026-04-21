@@ -3,7 +3,7 @@
 // Pannello Commissioner: tutte le funzionalità di gestione lega
 // ============================================================
 
-import { db, ref, get, set, push, update } from "./firebase.js";
+import { db, ref, get, set, push, update, PATH_DB_GIOCATORI } from "./firebase.js";
 import { parseCSVRose, calcAge, getCapLevel, roleColor } from "./utils.js";
 import { generateRoundRobin } from "./classifica.js";
 import { applyDefaultContracts } from "./rose.js";
@@ -26,7 +26,7 @@ export async function renderAdmin(leagueId, league, user) {
 
   // Carica dati necessari
   const [dbSnap, scheduleSnap, draftSnap] = await Promise.all([
-    get(ref(db, `db_giocatori/${leagueId}`)),
+    get(ref(db, PATH_DB_GIOCATORI)),
     get(ref(db, `leagues/${leagueId}/schedule`)),
     get(ref(db, `leagues/${leagueId}/draftState`)),
   ]);
@@ -122,52 +122,28 @@ function buildSettingsSection(settings, leagueId) {
 
 function buildPlayersSection(dbPlayers, dbCount) {
   const byTeam = {};
-  Object.values(dbPlayers).forEach(p => {
-    byTeam[p.team] = (byTeam[p.team] || 0) + 1;
-  });
-  const teamCount = Object.keys(byTeam).length;
+  Object.values(dbPlayers).forEach(p => { byTeam[p.team] = (byTeam[p.team]||0)+1; });
 
   return `
-    <div style="margin-bottom:16px">
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
-        <div style="font-size:13px;color:var(--text2)">
-          Giocatori nel DB: <strong style="color:${dbCount>0?"var(--green)":"var(--red)"}">${dbCount}</strong>
-        </div>
-        <div style="font-size:13px;color:var(--text2)">
-          Squadre presenti: <strong style="color:var(--text)">${teamCount} / 20</strong>
-        </div>
+    <div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;color:var(--text2)">
+      ℹ️ Il database giocatori è <strong style="color:var(--text)">globale</strong> e viene gestito dal Superadmin.
+      Se il DB è vuoto o incompleto, contatta il Superadmin per caricare il CSV.
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+      <div style="font-size:13px;color:var(--text2)">
+        Giocatori nel DB: <strong style="color:${dbCount>0?"var(--green)":"var(--red)"}">${dbCount}</strong>
       </div>
-
-      ${dbCount > 0 ? `
-      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)">
-        Squadre caricate: ${Object.keys(byTeam).sort().join(", ")}
-      </div>` : `
-      <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--red)">
-        ⚠ Nessun giocatore nel database. Carica il CSV per abilitare il Draft.
-      </div>`}
+      <div style="font-size:13px;color:var(--text2)">
+        Squadre presenti: <strong style="color:var(--text)">${Object.keys(byTeam).length} / 20</strong>
+      </div>
     </div>
-
-    <p style="color:var(--text2);font-size:13px;margin-bottom:12px">
-      Formato CSV: <code style="color:var(--accent)">Ruolo;Ruolo Mantra;Nome;Squadra;Quotazione;DataNascita</code><br>
-      DataNascita: <code style="color:var(--accent)">gg/mm/aaaa</code> · Separatore: punto e virgola
-    </p>
-
-    <div class="upload-zone" id="admin-csv-zone">
-      <span style="font-size:36px">📂</span>
-      <p>Trascina il CSV qui oppure</p>
-      <label class="btn btn-secondary btn-sm" style="cursor:pointer">
-        Scegli file CSV
-        <input type="file" id="admin-csv-input" accept=".csv" style="display:none">
-      </label>
-    </div>
-    <div id="admin-csv-status" style="margin-top:12px;font-size:13px"></div>
-
     ${dbCount > 0 ? `
-    <div style="margin-top:16px">
-      <button class="btn btn-ghost btn-sm" id="admin-clear-db-btn" style="color:var(--red)">
-        🗑️ Svuota database giocatori
-      </button>
-    </div>` : ""}
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text2)">
+      ${Object.entries(byTeam).sort((a,b)=>a[0].localeCompare(b[0])).map(([t,n])=>`<span style="margin-right:10px">${t}: ${n}</span>`).join("")}
+    </div>` : `
+    <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--red)">
+      ⚠ Nessun giocatore nel DB — il Draft non è disponibile finché il Superadmin non carica il CSV.
+    </div>`}
   `;
 }
 

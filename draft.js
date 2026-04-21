@@ -4,7 +4,7 @@
 // vincolo FM. Contratti assegnati in Rose dopo il draft.
 // ============================================================
 
-import { db, ref, get, set, push, update, onValue, off } from "./firebase.js";
+import { db, ref, get, set, push, update, onValue, off, PATH_DB_GIOCATORI, PATH_VOTI } from "./firebase.js";
 import { roleColor, macroRole, normalizeName, calcAge } from "./utils.js";
 
 const TURN_SECONDS = 180; // 3 minuti
@@ -36,7 +36,7 @@ export async function renderDraft(leagueId, league, user) {
   const el = document.getElementById("tab-draft");
 
   const [dbSnap, draftSnap, lotterySnap, scoresSnap, scheduleSnap] = await Promise.all([
-    get(ref(db, `db_giocatori/${leagueId}`)),
+    get(ref(db, PATH_DB_GIOCATORI)),
     get(ref(db, `leagues/${leagueId}/draftState`)),
     get(ref(db, `leagues/${leagueId}/lottery`)),
     get(ref(db, `leagues/${leagueId}/scores`)),

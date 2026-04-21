@@ -25,6 +25,8 @@ import { renderLottery    as _renderLottery    } from "./lottery.js";
 import { renderDraft      as _renderDraft, destroyDraft } from "./draft.js";
 import { renderRegolamento as _renderRegolamento } from "./regolamento.js";
 import { renderAdmin       as _renderAdmin       } from "./admin.js";
+import { renderSuperAdmin  as _renderSuperAdmin  } from "./superadmin.js";
+import { isSuperAdmin } from "./firebase.js";
 
 // ── STATE ───────────────────────────────────────
 let currentUser      = null;
@@ -123,9 +125,10 @@ function renderNavbarLeague() {
     label.textContent = `MANTRA · ${currentLeague.name}`;
     label.classList.remove("hidden");
     document.getElementById("navbar-tabs").classList.remove("hidden");
-    // Mostra tab Admin solo al commissioner
-    const isComm = currentLeague.commissionerUid === currentUser?.uid;
-    document.querySelector(".nav-tab-admin")?.classList.toggle("hidden", !isComm);
+    const isComm  = currentLeague.commissionerUid === currentUser?.uid;
+    const isSA    = isSuperAdmin(currentUser?.uid);
+    document.querySelector(".nav-tab-admin")?.classList.toggle("hidden", !isComm && !isSA);
+    document.querySelector(".nav-tab-superadmin")?.classList.toggle("hidden", !isSA);
   } else {
     label.textContent = "";
     label.classList.add("hidden");
@@ -166,6 +169,7 @@ function renderTab(tab) {
     case "draft":       renderDraft();       break;
     case "regolamento": renderRegolamento(); break;
     case "admin":       renderAdmin();       break;
+    case "superadmin":  renderSuperAdmin();  break;
   }
 }
 
@@ -432,6 +436,7 @@ function renderLottery()     { if (!currentLeague) return; _renderLottery(curren
 function renderDraft()       { if (!currentLeague) return; destroyDraft(); _renderDraft(currentLeagueId, currentLeague, currentUser); }
 function renderRegolamento() { if (!currentLeague) return; _renderRegolamento(currentLeagueId, currentLeague, currentUser); }
 function renderAdmin()       { if (!currentLeague) return; _renderAdmin(currentLeagueId, currentLeague, currentUser); }
+function renderSuperAdmin()  { _renderSuperAdmin(currentUser); }
 
 function placeholderTab(id, icon, title, desc) {
   const el = document.getElementById(`tab-${id}`);
