@@ -27,7 +27,6 @@ import { renderDraft      as _renderDraft, destroyDraft } from "./draft.js";
 import { renderRegolamento as _renderRegolamento } from "./regolamento.js";
 import { renderAdmin       as _renderAdmin       } from "./admin.js";
 import { renderSuperAdmin  as _renderSuperAdmin  } from "./superadmin.js";
-import { isSuperAdmin } from "./firebase.js";
 
 // ── STATE ───────────────────────────────────────
 let currentUser      = null;
