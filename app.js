@@ -62,7 +62,7 @@ onAuthStateChanged(auth, async (firebaseUser) => {
 
     showApp();
 
-    if (isSuperAdmin(firebaseUser.uid)) {
+    if (isSuperAdmin(firebaseUser.email)) {
       // Superadmin: carica la lega se ce l'ha, poi mostra sempre la tab superadmin
       await loadLeague();
       // Assicura che la tab superadmin sia sempre visibile
@@ -116,8 +116,8 @@ if (isSAMode) {
   document.getElementById("field-email")?.classList.add("hidden");
   document.getElementById("auth-email").removeAttribute("required");
   document.getElementById("forgot-wrap")?.classList.add("hidden");
-  document.querySelector(".logo-sub").textContent = "Accesso Admin";
-  document.getElementById("auth-submit-btn").textContent = "Accedi come Admin";
+  document.querySelector(".logo-sub").textContent = "Accesso Superadmin";
+  document.getElementById("auth-submit-btn").textContent = "Accedi come Superadmin";
 }
 
 // Login / Register tabs
@@ -194,7 +194,16 @@ document.getElementById("auth-form").addEventListener("submit", async (e) => {
 
   try {
     if (isSAMode) {
-      await loginUser(SUPERADMIN_EMAIL, password);
+      try {
+        await loginUser(SUPERADMIN_EMAIL, password);
+      } catch (err) {
+        if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found") {
+          // Prima volta: nessun account — lo crea automaticamente
+          await registerUser(SUPERADMIN_EMAIL, password, "Superadmin");
+        } else {
+          throw err;
+        }
+      }
     } else if (mode === "login") {
       await loginUser(email, password);
     } else {
@@ -222,7 +231,7 @@ function renderNavbarUser() {
 
 function renderNavbarLeague() {
   const label = document.getElementById("navbar-league-label");
-  const isSA  = isSuperAdmin(currentUser?.uid);
+  const isSA  = isSuperAdmin(currentUser?.email);
 
   if (currentLeague) {
     label.textContent = `MANTRA · ${currentLeague.name}`;

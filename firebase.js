@@ -40,17 +40,12 @@ export const auth = getAuth(app);
 export const db   = getDatabase(app);
 
 // ── SUPERADMIN ──────────────────────────────────
-// UID dell'account superadmin (Lorenzo) — hardcoded come in fanta-seriea.it
-// Per trovare il tuo UID: Firebase Console → Authentication → Users
-export const SUPERADMIN_UIDS = new Set([
-  "7cmWVw9XHnbbsXtSVxpbw39sZln2"
-]);
+// Email interna fittizia — non viene mai mostrata all'utente.
+// L'account viene creato automaticamente al primo accesso tramite il form ?sa=1.
+export const SUPERADMIN_EMAIL = "superadmin@fantadraft.it";
 
-// Email associata all'account superadmin — usata per il login password-only
-export const SUPERADMIN_EMAIL = "lorenzosimonazzi6@gmail.com";
-
-export function isSuperAdmin(uid) {
-  return SUPERADMIN_UIDS.has(uid);
+export function isSuperAdmin(email) {
+  return email === SUPERADMIN_EMAIL;
 }
 
 // Path globali (condivisi tra tutte le leghe)

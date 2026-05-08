@@ -12,7 +12,7 @@ import { SERIE_A_CLUBS } from "./matches.js";
 export async function renderSuperAdmin(user) {
   const el = document.getElementById("tab-superadmin");
 
-  if (!isSuperAdmin(user.uid)) {
+  if (!isSuperAdmin(user.email)) {
     el.innerHTML = `
       <div class="empty-state">
         <div class="es-icon">🔒</div>
