@@ -98,20 +98,24 @@ function buildFormazioniHTML(teams, myTeam, settings) {
       <span id="fm-stat-msg" style="margin-left:auto;font-size:12px"></span>
     </div>
 
-    <!-- CAMPO -->
-    <div class="fm-pitch-wrap">
-      <div class="fm-pitch" id="fm-pitch">
-        ${buildPitch()}
+    <!-- CAMPO + PANCHINA -->
+    <div class="fm-main">
+      <div class="fm-pitch-col">
+        <div class="fm-pitch" id="fm-pitch">
+          ${buildPitch()}
+        </div>
       </div>
 
-      <!-- PANCHINA STRIP -->
-      <div class="fm-bench-strip">
-        <div class="bench-strip-header">
-          <span class="bench-strip-title">🪑 Panchina</span>
-          <span class="bench-strip-count" id="bench-strip-count">0 / 12</span>
-        </div>
-        <div class="bench-strip-items" id="fm-bench-items">
-          <div class="bench-strip-empty">Nessun giocatore in panchina — clicca uno slot sul campo</div>
+      <!-- PANCHINA PANEL -->
+      <div class="fm-bench-col">
+        <div class="fm-bench-panel">
+          <div class="fm-bench-panel-hdr">
+            <span class="fm-bench-title">🪑 Panchina</span>
+            <span class="fm-bench-count" id="bench-strip-count">0 / 12</span>
+          </div>
+          <div class="fm-bench-list" id="fm-bench-items">
+            <div class="fm-bench-empty">Usa il tasto 🪑 nel picker per aggiungere alla panchina</div>
+          </div>
         </div>
       </div>
     </div>
@@ -160,30 +164,35 @@ function buildPitch() {
 }
 
 function buildPitchSlot(slot) {
-  const player  = _titolari[slot.id];
-  const active  = _activeSlot === slot.id;
-  const wrong   = player && !isCompatible(player, slot);
+  const player = _titolari[slot.id];
+  const active = _activeSlot === slot.id;
+  const offPos = player && !isCompatible(player, slot);
+  const malus  = offPos && isWithMalus(player, slot);
+  const wrong  = offPos && !malus;
 
   if (player) {
     const initials = player.name.split(" ").map(w => w[0]).slice(0,2).join("");
+    const rc = roleColor(player.roles?.[0]);
     return `
-      <div class="pitch-slot slot-filled${active ? " slot-active" : ""}${wrong ? " slot-wrong" : ""}"
+      <div class="pitch-slot slot-filled${active ? " slot-active" : ""}${malus ? " slot-malus" : ""}${wrong ? " slot-wrong" : ""}"
            data-slot="${slot.id}" data-compatible="${slot.compatible.join(",")}">
-        <div class="slot-macro-tag">${slot.label}</div>
-        <div class="slot-avatar" style="background:${roleColor(player.roles?.[0])}30;border-color:${roleColor(player.roles?.[0])}">
-          <span class="slot-avatar-initials">${initials}</span>
-          ${wrong ? `<span class="slot-wrong-dot" title="Fuori ruolo">⚠</span>` : ""}
+        <div class="slot-token" style="background:linear-gradient(160deg,${rc}ee,${rc}77)">
+          <span class="slot-initials">${initials}</span>
+          <span class="slot-pos-tag">${slot.label}</span>
+          ${malus ? `<span class="slot-malus-badge">-1</span>` : ""}
+          ${wrong ? `<span class="slot-warn-badge">!</span>` : ""}
         </div>
-        <div class="slot-player-name">${shortName(player.name)}</div>
-        <div class="slot-player-role" style="color:${roleColor(player.roles?.[0])}">${(player.roles||[]).join("/")}</div>
+        <div class="slot-name">${shortName(player.name)}</div>
         <button class="slot-remove-btn" data-slot="${slot.id}">✕</button>
       </div>`;
   } else {
     return `
       <div class="pitch-slot slot-empty${active ? " slot-active" : ""}"
            data-slot="${slot.id}" data-compatible="${slot.compatible.join(",")}">
-        <div class="slot-macro-tag">${slot.label}</div>
-        <div class="slot-add-icon">+</div>
+        <div class="slot-token slot-token-empty">
+          <span class="slot-empty-pos">${slot.label}</span>
+          <span class="slot-add-plus">+</span>
+        </div>
       </div>`;
   }
 }
@@ -205,18 +214,27 @@ function refreshBench() {
   if (count) count.textContent = `${_panchina.length} / 12`;
 
   if (!_panchina.length) {
-    items.innerHTML = `<div class="bench-strip-empty">Nessun giocatore in panchina</div>`;
+    items.innerHTML = `<div class="fm-bench-empty">Usa il tasto 🪑 nel picker per aggiungere alla panchina</div>`;
     return;
   }
-  items.innerHTML = _panchina.map((p, i) => `
-    <div class="bench-chip" data-bench-idx="${i}">
-      <span class="bench-chip-role" style="background:${roleColor(p.roles?.[0])}">${(p.roles||[]).join("/")}</span>
-      <span class="bench-chip-name">${shortName(p.name)}</span>
-      <span class="bench-chip-club">${p.team}</span>
-      <button class="bench-chip-remove" data-idx="${i}">✕</button>
-    </div>`).join("");
+  items.innerHTML = _panchina.map((p, i) => {
+    const rc       = roleColor(p.roles?.[0]);
+    const initials = p.name.split(" ").map(w => w[0]).slice(0,2).join("");
+    return `
+      <div class="bench-player-card" data-bench-idx="${i}">
+        <span class="bench-card-order">${i + 1}</span>
+        <div class="bench-card-avatar" style="background:linear-gradient(160deg,${rc}ee,${rc}66)">
+          ${initials}
+        </div>
+        <div class="bench-card-info">
+          <span class="bench-card-name">${shortName(p.name)}</span>
+          <span class="bench-card-sub">${(p.roles||[]).join("/")} · ${p.team}</span>
+        </div>
+        <button class="bench-card-remove" data-idx="${i}">✕</button>
+      </div>`;
+  }).join("");
 
-  items.querySelectorAll(".bench-chip-remove").forEach(btn => {
+  items.querySelectorAll(".bench-card-remove").forEach(btn => {
     btn.addEventListener("click", e => {
       e.stopPropagation();
       _panchina.splice(parseInt(btn.dataset.idx), 1);
@@ -255,7 +273,11 @@ function openPicker(slotId) {
   const searchEl = document.getElementById("picker-search");
 
   if (labelEl)  labelEl.textContent  = `Slot: ${slot.label}`;
-  if (rolesEl)  rolesEl.textContent  = `Compatibili: ${slot.compatible.join(", ")}`;
+  if (rolesEl) {
+    const compStr = slot.compatible.join(", ");
+    const malusStr = slot.withMalus?.length ? ` · -1: ${slot.withMalus.join(", ")}` : "";
+    rolesEl.textContent = `OK: ${compStr}${malusStr}`;
+  }
   if (searchEl) { searchEl.value = ""; }
   if (picker)   picker.classList.add("open");
   if (backdrop) backdrop.classList.add("visible");
@@ -290,11 +312,11 @@ function renderPickerPlayers(slot) {
     return !inUse && searchOk;
   });
 
-  const compatible   = available.filter(p => isCompatible(p, slot));
-  const incompatible = available.filter(p => !isCompatible(p, slot));
+  const compatible = available.filter(p => isCompatible(p, slot));
+  const withMalus  = available.filter(p => isWithMalus(p, slot));
 
-  if (!available.length) {
-    body.innerHTML = `<div class="picker-empty">Nessun giocatore disponibile</div>`;
+  if (!compatible.length && !withMalus.length) {
+    body.innerHTML = `<div class="picker-empty">Nessun giocatore disponibile per questo slot</div>`;
     return;
   }
 
@@ -302,9 +324,9 @@ function renderPickerPlayers(slot) {
     ${compatible.length ? `
       <div class="picker-section-label">✓ Compatibili (${compatible.length})</div>
       ${compatible.map(p => pickerPlayerItem(p, true)).join("")}` : ""}
-    ${incompatible.length ? `
-      <div class="picker-section-label" style="color:var(--text3)">⚠ Fuori ruolo (${incompatible.length})</div>
-      ${incompatible.map(p => pickerPlayerItem(p, false)).join("")}` : ""}
+    ${withMalus.length ? `
+      <div class="picker-section-label" style="color:var(--orange)">⚠ Fuori ruolo -1 (${withMalus.length})</div>
+      ${withMalus.map(p => pickerPlayerItem(p, false)).join("")}` : ""}
   `;
 
   body.querySelectorAll(".picker-player-item").forEach(item => {
@@ -482,7 +504,12 @@ function bindFormazioniEvents(teams, myTeam, settings) {
 
 // ── HELPERS ──────────────────────────────────────
 function isCompatible(player, slot) {
-  return (player.roles || []).some(r => slot.compatible.includes(r));
+  return (player.roles || []).some(r => (slot.compatible || []).includes(r));
+}
+
+function isWithMalus(player, slot) {
+  if (isCompatible(player, slot)) return false;
+  return (player.roles || []).some(r => (slot.withMalus || []).includes(r));
 }
 
 function shortName(name) {

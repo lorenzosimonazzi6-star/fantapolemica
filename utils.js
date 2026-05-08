@@ -30,21 +30,26 @@ export function contractYearCost(baseCost, year, under21 = false, isRenewal = fa
 
 // ── RUOLI ────────────────────────────────────────
 const ROLE_COLORS = {
+  // Standard Mantra abbreviations (uppercase)
   P:   "#f59e0b",
+  DC:  "#3b82f6",
+  DD:  "#3b82f6",
+  DS:  "#3b82f6",
+  B:   "#6366f1",
+  E:   "#8b5cf6",
+  M:   "#10b981",
+  C:   "#10b981",
+  W:   "#06b6d4",
+  T:   "#f97316",
+  A:   "#ef4444",
+  PC:  "#ef4444",
+  // Legacy/alternate abbreviations (backward compat)
   Por: "#f59e0b",
-  D:   "#3b82f6",
   Dc:  "#3b82f6",
   Dd:  "#3b82f6",
   Ds:  "#3b82f6",
-  E:   "#8b5cf6",
-  M:   "#10b981",
   Mf:  "#10b981",
-  C:   "#10b981",
-  W:   "#06b6d4",
-  T:   "#06b6d4",
-  B:   "#6366f1",
   Att: "#ef4444",
-  A:   "#ef4444",
   Pc:  "#ef4444",
   Tr:  "#f97316",
 };
