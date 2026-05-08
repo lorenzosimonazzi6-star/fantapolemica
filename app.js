@@ -8,11 +8,12 @@ import {
   registerUser, loginUser, logoutUser, resetPassword,
   getUserProfile, createLeague, joinLeague,
   getLeague,
-  ref, get, onValue, off,
+  ref, get, set, onValue, off,
   onAuthStateChanged,
   translateAuthError,
   capLevelLabel, capLevelBadgeClass,
   isSuperAdmin,
+  SUPERADMIN_EMAIL,
 } from "./firebase.js";
 
 import { renderRose       as _renderRose       } from "./rose.js";
@@ -46,6 +47,19 @@ onAuthStateChanged(auth, async (firebaseUser) => {
   if (firebaseUser) {
     currentUser    = firebaseUser;
     currentProfile = await getUserProfile(firebaseUser.uid);
+
+    // Profilo mancante nel DB (es. scrittura fallita durante registrazione): lo ricrea
+    if (!currentProfile) {
+      currentProfile = {
+        uid:         firebaseUser.uid,
+        displayName: firebaseUser.displayName || firebaseUser.email.split("@")[0],
+        email:       firebaseUser.email,
+        createdAt:   Date.now(),
+        leagues:     {},
+      };
+      await set(ref(db, `users/${firebaseUser.uid}`), currentProfile);
+    }
+
     showApp();
 
     if (isSuperAdmin(firebaseUser.uid)) {
@@ -93,6 +107,17 @@ function showSuperAdminShell() {
   });
   // Attiva tab superadmin
   switchTab("superadmin");
+}
+
+// ── SUPERADMIN QUICK-LOGIN (app.html?sa=1) ──────────
+const isSAMode = new URLSearchParams(window.location.search).has("sa");
+if (isSAMode) {
+  document.querySelector(".login-tabs")?.classList.add("hidden");
+  document.getElementById("field-email")?.classList.add("hidden");
+  document.getElementById("auth-email").removeAttribute("required");
+  document.getElementById("forgot-wrap")?.classList.add("hidden");
+  document.querySelector(".logo-sub").textContent = "Accesso Admin";
+  document.getElementById("auth-submit-btn").textContent = "Accedi come Admin";
 }
 
 // Login / Register tabs
@@ -168,7 +193,9 @@ document.getElementById("auth-form").addEventListener("submit", async (e) => {
   btn.textContent = "...";
 
   try {
-    if (mode === "login") {
+    if (isSAMode) {
+      await loginUser(SUPERADMIN_EMAIL, password);
+    } else if (mode === "login") {
       await loginUser(email, password);
     } else {
       if (!displayName) throw new Error("Inserisci il tuo nome");

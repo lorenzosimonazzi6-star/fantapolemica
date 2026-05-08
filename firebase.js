@@ -46,6 +46,9 @@ export const SUPERADMIN_UIDS = new Set([
   "7cmWVw9XHnbbsXtSVxpbw39sZln2"
 ]);
 
+// Email associata all'account superadmin — usata per il login password-only
+export const SUPERADMIN_EMAIL = "lorenzosimonazzi6@gmail.com";
+
 export function isSuperAdmin(uid) {
   return SUPERADMIN_UIDS.has(uid);
 }
