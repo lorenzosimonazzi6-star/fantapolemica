@@ -1,23 +1,25 @@
 // ============================================================
 // FANTADRAFT — formazioni.js
-// Tab Formazioni: schieramento titolari + panchina Mantra
+// Tab Formazioni: campo interattivo con picker per slot
 // ============================================================
 
-import { db, ref, get, set, update } from "./firebase.js";
+import { db, ref, get, set } from "./firebase.js";
 import { MANTRA_MODULI } from "./matches.js";
 import { roleColor, macroRole } from "./utils.js";
 
 // ── STATE ────────────────────────────────────────
-let _leagueId   = null;
-let _league     = null;
-let _user       = null;
-let _teamId     = null;
+let _leagueId    = null;
+let _league      = null;
+let _user        = null;
+let _teamId      = null;
 let _teamPlayers = [];
-let _gw         = 1;
-let _modulo     = "3-4-3";
-let _titolari   = {};   // { slotId: playerObj }
-let _panchina   = [];   // [playerObj, ...]
-let _saving     = false;
+let _gw          = 1;
+let _modulo      = "3-4-3";
+let _titolari    = {};   // { slotId: playerObj }
+let _panchina    = [];   // [playerObj, ...]
+let _saving      = false;
+let _activeSlot  = null; // slotId con picker aperto
+let _pickerSearch = "";
 
 // ── INIT ─────────────────────────────────────────
 export async function renderFormazioni(leagueId, league, user) {
@@ -34,15 +36,14 @@ export async function renderFormazioni(leagueId, league, user) {
   el.innerHTML = buildFormazioniHTML(teams, myTeam, settings);
   bindFormazioniEvents(teams, myTeam, settings);
 
-  // Carica formazione del team selezionato
   if (myTeam) {
-    _teamId = myTeam.id;
-    _teamPlayers = Object.values(myTeam.players || []);
+    _teamId      = myTeam.id;
+    _teamPlayers = Object.values(myTeam.players || {});
     await loadFormazione(myTeam.id, _gw);
   }
 }
 
-// ── HTML ─────────────────────────────────────────
+// ── MAIN HTML ─────────────────────────────────────
 function buildFormazioniHTML(teams, myTeam, settings) {
   const gwStart = settings.gwStart || 1;
   const gwEnd   = settings.gwEnd   || 34;
@@ -55,34 +56,36 @@ function buildFormazioniHTML(teams, myTeam, settings) {
     </div>
 
     <!-- TOOLBAR -->
-    <div class="form-toolbar card card-sm" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
-      <div class="form-group" style="min-width:220px">
-        <label class="form-label">Manager</label>
-        <select class="form-input" id="fm-team-select">
-          ${myTeam ? `<option value="${myTeam.id}" selected>🏠 ${myTeam.name} (la mia)</option>` : ""}
-          ${teams.filter(t => !myTeam || t.id !== myTeam.id).map(t =>
-            `<option value="${t.id}" disabled>${t.name} (${t.ownerName})</option>`
-          ).join("")}
-        </select>
-      </div>
-      <div class="form-group" style="min-width:100px">
-        <label class="form-label">Giornata</label>
-        <select class="form-input" id="fm-gw-select">
-          ${gwOpts.map(g => `<option value="${g}" ${g === _gw ? "selected" : ""}>GW ${g}</option>`).join("")}
-        </select>
-      </div>
-      <div class="form-group" style="min-width:130px">
-        <label class="form-label">Modulo</label>
-        <select class="form-input" id="fm-modulo-select">
-          ${Object.keys(MANTRA_MODULI).map(m =>
-            `<option value="${m}" ${m === _modulo ? "selected" : ""}>${m}</option>`
-          ).join("")}
-        </select>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:16px;align-items:center">
-        <button class="btn btn-primary" id="fm-save-btn">💾 Salva</button>
-        <button class="btn btn-secondary" id="fm-load-btn">📂 Carica</button>
-        <button class="btn btn-ghost" id="fm-reset-btn">🔄 Reset</button>
+    <div class="fm-toolbar card card-sm">
+      <div class="fm-toolbar-row">
+        <div class="form-group" style="min-width:200px;flex:1">
+          <label class="form-label">Manager</label>
+          <select class="form-input" id="fm-team-select">
+            ${myTeam ? `<option value="${myTeam.id}" selected>🏠 ${myTeam.name} (la mia)</option>` : ""}
+            ${teams.filter(t => !myTeam || t.id !== myTeam.id).map(t =>
+              `<option value="${t.id}" disabled>${t.name} (${t.ownerName})</option>`
+            ).join("")}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Giornata</label>
+          <select class="form-input" id="fm-gw-select" style="width:100px">
+            ${gwOpts.map(g => `<option value="${g}" ${g === _gw ? "selected" : ""}>GW ${g}</option>`).join("")}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Modulo</label>
+          <select class="form-input" id="fm-modulo-select" style="width:110px">
+            ${Object.keys(MANTRA_MODULI).map(m =>
+              `<option value="${m}" ${m === _modulo ? "selected" : ""}>${m}</option>`
+            ).join("")}
+          </select>
+        </div>
+        <div class="fm-toolbar-actions">
+          <button class="btn btn-primary btn-sm" id="fm-save-btn">💾 Salva</button>
+          <button class="btn btn-secondary btn-sm" id="fm-load-btn">📂 Carica</button>
+          <button class="btn btn-ghost btn-sm" id="fm-reset-btn">🔄 Reset</button>
+        </div>
       </div>
     </div>
 
@@ -90,252 +93,306 @@ function buildFormazioniHTML(teams, myTeam, settings) {
     <div class="fm-stats-bar" id="fm-stats-bar">
       <span id="fm-stat-titolari">Titolari: 0/11</span>
       <span id="fm-stat-panchina">Panchina: 0/12</span>
-      <span id="fm-stat-fuoriruolo">Fuori ruolo: 0</span>
+      <span id="fm-stat-fuoriruolo" style="color:var(--orange)">Fuori ruolo: 0</span>
       <span id="fm-stat-penalita" style="color:var(--red)"></span>
-      <span id="fm-stat-msg" style="margin-left:auto"></span>
+      <span id="fm-stat-msg" style="margin-left:auto;font-size:12px"></span>
     </div>
 
-    <!-- MAIN LAYOUT: campo + lista giocatori -->
-    <div class="fm-main">
-
-      <!-- CAMPO -->
-      <div class="fm-field-wrap">
-        <div class="fm-field" id="fm-field">
-          ${buildField()}
-        </div>
-        <!-- PANCHINA -->
-        <div class="fm-bench-wrap">
-          <div class="fm-bench-title">🪑 PANCHINA (0/12)</div>
-          <div class="fm-bench-list" id="fm-bench-list"></div>
-        </div>
+    <!-- CAMPO -->
+    <div class="fm-pitch-wrap">
+      <div class="fm-pitch" id="fm-pitch">
+        ${buildPitch()}
       </div>
 
-      <!-- LISTA GIOCATORI (rosa) -->
-      <div class="fm-roster-panel">
-        <div class="fm-roster-search">
-          <input class="form-input" id="fm-search" placeholder="🔍 Cerca giocatore...">
-          <div class="role-filter-btns" style="margin-top:8px">
-            ${["all","P","D","C","A"].map(r => `
-              <button class="role-btn ${r === "all" ? "active" : ""}" data-role="${r}">
-                ${r === "all" ? "Tutti" : r}
-              </button>`).join("")}
-          </div>
+      <!-- PANCHINA STRIP -->
+      <div class="fm-bench-strip">
+        <div class="bench-strip-header">
+          <span class="bench-strip-title">🪑 Panchina</span>
+          <span class="bench-strip-count" id="bench-strip-count">0 / 12</span>
         </div>
-        <div class="fm-roster-list" id="fm-roster-list">
-          <div style="color:var(--text2);font-size:13px;padding:20px">
-            Seleziona una squadra e una giornata
-          </div>
+        <div class="bench-strip-items" id="fm-bench-items">
+          <div class="bench-strip-empty">Nessun giocatore in panchina — clicca uno slot sul campo</div>
         </div>
       </div>
-
     </div>
+
+    <!-- PICKER PANEL (slide-in) -->
+    <div class="fm-picker" id="fm-picker">
+      <div class="picker-header" id="picker-header">
+        <div class="picker-slot-info">
+          <span class="picker-slot-label" id="picker-slot-label">—</span>
+          <span class="picker-slot-roles" id="picker-slot-roles"></span>
+        </div>
+        <button class="picker-close-btn" id="picker-close-btn">✕</button>
+      </div>
+      <div class="picker-search-wrap">
+        <input class="form-input" id="picker-search" placeholder="🔍 Cerca giocatore..." autocomplete="off">
+      </div>
+      <div class="picker-body" id="picker-body"></div>
+    </div>
+    <div class="fm-picker-backdrop" id="fm-picker-backdrop"></div>
   `;
 }
 
-function buildField() {
+// ── CAMPO ─────────────────────────────────────────
+function buildPitch() {
   const modulo = MANTRA_MODULI[_modulo];
   if (!modulo) return "";
 
-  // Raggruppa slot per macro ruolo per posizionamento visivo
-  const rows = { P:[], D:[], C:[], A:[] };
+  const rows = { A:[], C:[], D:[], P:[] };
   for (const slot of modulo.slots) rows[slot.macro].push(slot);
 
   return `
-    <div class="field-inner">
-      ${["P","D","C","A"].map(macro => `
-        <div class="field-row field-row-${macro.toLowerCase()}">
-          ${rows[macro].map(slot => buildSlot(slot)).join("")}
+    <div class="pitch-decorations">
+      <div class="pitch-line pitch-halfway"></div>
+      <div class="pitch-circle"></div>
+      <div class="pitch-penalty pitch-penalty-top"></div>
+      <div class="pitch-penalty pitch-penalty-bot"></div>
+      <div class="pitch-goal pitch-goal-top"></div>
+      <div class="pitch-goal pitch-goal-bot"></div>
+    </div>
+    <div class="pitch-rows">
+      ${["A","C","D","P"].map(macro => `
+        <div class="pitch-row pitch-row-${macro.toLowerCase()}">
+          ${rows[macro].map(slot => buildPitchSlot(slot)).join("")}
         </div>`).join("")}
     </div>`;
 }
 
-function buildSlot(slot) {
-  const player = _titolari[slot.id];
-  const isEmpty = !player;
-  const isWrong = player && !isCompatible(player, slot);
+function buildPitchSlot(slot) {
+  const player  = _titolari[slot.id];
+  const active  = _activeSlot === slot.id;
+  const wrong   = player && !isCompatible(player, slot);
 
-  return `
-    <div class="field-slot ${isEmpty ? "slot-empty" : "slot-filled"} ${isWrong ? "slot-wrong" : ""}"
-         data-slot="${slot.id}"
-         data-macro="${slot.macro}"
-         data-compatible="${slot.compatible.join(",")}">
-      <div class="slot-label">${slot.label}</div>
-      ${player
-        ? `<div class="slot-player">
-             <div class="slot-player-name">${shortName(player.name)}</div>
-             <div class="slot-player-role" style="color:${roleColor(player.roles?.[0])}">${(player.roles||[]).join("/")}</div>
-             <button class="slot-remove" data-slot="${slot.id}">✕</button>
-           </div>`
-        : `<div class="slot-placeholder">+</div>`}
-    </div>`;
+  if (player) {
+    const initials = player.name.split(" ").map(w => w[0]).slice(0,2).join("");
+    return `
+      <div class="pitch-slot slot-filled${active ? " slot-active" : ""}${wrong ? " slot-wrong" : ""}"
+           data-slot="${slot.id}" data-compatible="${slot.compatible.join(",")}">
+        <div class="slot-macro-tag">${slot.label}</div>
+        <div class="slot-avatar" style="background:${roleColor(player.roles?.[0])}30;border-color:${roleColor(player.roles?.[0])}">
+          <span class="slot-avatar-initials">${initials}</span>
+          ${wrong ? `<span class="slot-wrong-dot" title="Fuori ruolo">⚠</span>` : ""}
+        </div>
+        <div class="slot-player-name">${shortName(player.name)}</div>
+        <div class="slot-player-role" style="color:${roleColor(player.roles?.[0])}">${(player.roles||[]).join("/")}</div>
+        <button class="slot-remove-btn" data-slot="${slot.id}">✕</button>
+      </div>`;
+  } else {
+    return `
+      <div class="pitch-slot slot-empty${active ? " slot-active" : ""}"
+           data-slot="${slot.id}" data-compatible="${slot.compatible.join(",")}">
+        <div class="slot-macro-tag">${slot.label}</div>
+        <div class="slot-add-icon">+</div>
+      </div>`;
+  }
 }
 
-// ── RENDER AGGIORNAMENTO CAMPO ────────────────────
-function refreshField() {
-  document.getElementById("fm-field").innerHTML = buildField();
+// ── REFRESH ───────────────────────────────────────
+function refreshPitch() {
+  const el = document.getElementById("fm-pitch");
+  if (el) el.innerHTML = buildPitch();
   refreshBench();
   refreshStats();
-  refreshRoster();
   bindSlotEvents();
+  if (_activeSlot) openPicker(_activeSlot);
 }
 
 function refreshBench() {
-  const bench = document.getElementById("fm-bench-list");
-  const title = document.querySelector(".fm-bench-title");
-  if (!bench) return;
-  if (title) title.textContent = `🪑 PANCHINA (${_panchina.length}/12)`;
-  bench.innerHTML = _panchina.map((p, i) => `
-    <div class="bench-item" data-bench-idx="${i}">
-      <span class="rose-role-badge" style="background:${roleColor(p.roles?.[0])};font-size:10px">${(p.roles||[]).join("/")}</span>
-      <span class="bench-name">${p.name}</span>
-      <span style="color:var(--text2);font-size:11px">${p.team}</span>
-      <button class="bench-remove" data-idx="${i}">✕</button>
-    </div>`).join("") || `<div style="color:var(--text3);font-size:12px;padding:10px">Nessun giocatore in panchina</div>`;
+  const items = document.getElementById("fm-bench-items");
+  const count = document.getElementById("bench-strip-count");
+  if (!items) return;
+  if (count) count.textContent = `${_panchina.length} / 12`;
 
-  bench.querySelectorAll(".bench-remove").forEach(btn => {
+  if (!_panchina.length) {
+    items.innerHTML = `<div class="bench-strip-empty">Nessun giocatore in panchina</div>`;
+    return;
+  }
+  items.innerHTML = _panchina.map((p, i) => `
+    <div class="bench-chip" data-bench-idx="${i}">
+      <span class="bench-chip-role" style="background:${roleColor(p.roles?.[0])}">${(p.roles||[]).join("/")}</span>
+      <span class="bench-chip-name">${shortName(p.name)}</span>
+      <span class="bench-chip-club">${p.team}</span>
+      <button class="bench-chip-remove" data-idx="${i}">✕</button>
+    </div>`).join("");
+
+  items.querySelectorAll(".bench-chip-remove").forEach(btn => {
     btn.addEventListener("click", e => {
       e.stopPropagation();
-      const idx = parseInt(btn.dataset.idx);
-      _panchina.splice(idx, 1);
+      _panchina.splice(parseInt(btn.dataset.idx), 1);
       refreshBench();
       refreshStats();
-      refreshRoster();
     });
   });
 }
 
 function refreshStats() {
   const titCount = Object.values(_titolari).filter(Boolean).length;
-  const penCount = Object.entries(_titolari).filter(([slotId, p]) => {
+  const wrongCount = Object.entries(_titolari).filter(([slotId, p]) => {
     if (!p) return false;
     const slot = MANTRA_MODULI[_modulo]?.slots.find(s => s.id === slotId);
     return slot && !isCompatible(p, slot);
   }).length;
 
-  document.getElementById("fm-stat-titolari").textContent = `Titolari: ${titCount}/11`;
-  document.getElementById("fm-stat-panchina").textContent = `Panchina: ${_panchina.length}/12`;
-  document.getElementById("fm-stat-fuoriruolo").textContent = `Fuori ruolo: ${penCount}`;
+  document.getElementById("fm-stat-titolari").textContent   = `Titolari: ${titCount}/11`;
+  document.getElementById("fm-stat-panchina").textContent   = `Panchina: ${_panchina.length}/12`;
+  document.getElementById("fm-stat-fuoriruolo").textContent = `Fuori ruolo: ${wrongCount}`;
   const penEl = document.getElementById("fm-stat-penalita");
-  if (penEl) penEl.textContent = penCount > 0 ? `⚠ ${penCount} penalità modulo` : "";
+  if (penEl) penEl.textContent = wrongCount > 0 ? `⚠ ${wrongCount} penalità modulo` : "";
 }
 
-function refreshRoster() {
+// ── PICKER ────────────────────────────────────────
+function openPicker(slotId) {
+  _activeSlot  = slotId;
+  _pickerSearch = "";
+  const slot = MANTRA_MODULI[_modulo]?.slots.find(s => s.id === slotId);
+  if (!slot) return;
+
+  const picker   = document.getElementById("fm-picker");
+  const backdrop = document.getElementById("fm-picker-backdrop");
+  const labelEl  = document.getElementById("picker-slot-label");
+  const rolesEl  = document.getElementById("picker-slot-roles");
+  const searchEl = document.getElementById("picker-search");
+
+  if (labelEl)  labelEl.textContent  = `Slot: ${slot.label}`;
+  if (rolesEl)  rolesEl.textContent  = `Compatibili: ${slot.compatible.join(", ")}`;
+  if (searchEl) { searchEl.value = ""; }
+  if (picker)   picker.classList.add("open");
+  if (backdrop) backdrop.classList.add("visible");
+
+  renderPickerPlayers(slot);
+
+  // Rende attivo lo slot visivamente
+  document.querySelectorAll(".pitch-slot").forEach(el => el.classList.remove("slot-active"));
+  document.querySelector(`.pitch-slot[data-slot="${slotId}"]`)?.classList.add("slot-active");
+}
+
+function closePicker() {
+  _activeSlot = null;
+  document.getElementById("fm-picker")?.classList.remove("open");
+  document.getElementById("fm-picker-backdrop")?.classList.remove("visible");
+  document.querySelectorAll(".pitch-slot").forEach(el => el.classList.remove("slot-active"));
+}
+
+function renderPickerPlayers(slot) {
+  const body = document.getElementById("picker-body");
+  if (!body) return;
+
   const usedIds = new Set([
     ...Object.values(_titolari).filter(Boolean).map(p => p.id || p.name),
     ..._panchina.map(p => p.id || p.name),
   ]);
-  const search   = document.getElementById("fm-search")?.value?.toLowerCase() || "";
-  const roleFilter = document.querySelector(".role-btn.active")?.dataset?.role || "all";
+  const q = _pickerSearch.toLowerCase();
 
-  const filtered = _teamPlayers.filter(p => {
-    const inUse    = usedIds.has(p.id || p.name);
-    const roleOk   = roleFilter === "all" || macroRole(p.roles?.[0]) === roleFilter;
-    const searchOk = !search || p.name.toLowerCase().includes(search);
-    return !inUse && roleOk && searchOk;
+  const available = _teamPlayers.filter(p => {
+    const inUse = usedIds.has(p.id || p.name);
+    const searchOk = !q || p.name.toLowerCase().includes(q) || (p.team||"").toLowerCase().includes(q);
+    return !inUse && searchOk;
   });
 
-  const list = document.getElementById("fm-roster-list");
-  if (!list) return;
-  list.innerHTML = filtered.length === 0
-    ? `<div style="color:var(--text2);font-size:13px;padding:16px">Nessun giocatore disponibile</div>`
-    : filtered.map(p => `
-        <div class="roster-item" data-pid="${p.id || p.name}" data-name="${p.name}">
-          <span class="rose-role-badge" style="background:${roleColor(p.roles?.[0])};font-size:10px;flex-shrink:0">${(p.roles||[]).join("/")}</span>
-          <span style="flex:1;font-size:13px">${p.name}</span>
-          <span style="color:var(--text2);font-size:11px">${p.team}</span>
-          <span style="color:var(--accent);font-size:11px">${p.currentCost||0}FM</span>
-        </div>`).join("");
+  const compatible   = available.filter(p => isCompatible(p, slot));
+  const incompatible = available.filter(p => !isCompatible(p, slot));
 
-  list.querySelectorAll(".roster-item").forEach(item => {
+  if (!available.length) {
+    body.innerHTML = `<div class="picker-empty">Nessun giocatore disponibile</div>`;
+    return;
+  }
+
+  body.innerHTML = `
+    ${compatible.length ? `
+      <div class="picker-section-label">✓ Compatibili (${compatible.length})</div>
+      ${compatible.map(p => pickerPlayerItem(p, true)).join("")}` : ""}
+    ${incompatible.length ? `
+      <div class="picker-section-label" style="color:var(--text3)">⚠ Fuori ruolo (${incompatible.length})</div>
+      ${incompatible.map(p => pickerPlayerItem(p, false)).join("")}` : ""}
+  `;
+
+  body.querySelectorAll(".picker-player-item").forEach(item => {
     item.addEventListener("click", () => {
-      const pid  = item.dataset.pid;
-      const player = _teamPlayers.find(p => (p.id || p.name) === pid);
-      if (!player) return;
-      // Trova il primo slot compatibile vuoto
-      const modulo = MANTRA_MODULI[_modulo];
-      let assigned = false;
-      if (modulo) {
-        for (const slot of modulo.slots) {
-          if (!_titolari[slot.id] && isCompatible(player, slot)) {
-            _titolari[slot.id] = player;
-            assigned = true;
-            break;
-          }
-        }
-      }
-      // Se non trovato slot, metti in panchina (se c'è posto)
-      if (!assigned && _panchina.length < 12) {
-        _panchina.push(player);
-      } else if (!assigned) {
-        const msg = document.getElementById("fm-stat-msg");
-        if (msg) { msg.textContent = "⚠ Panchina piena (max 12)"; setTimeout(() => msg.textContent = "", 2000); }
-      }
-      refreshField();
+      const pid    = item.dataset.pid;
+      const player = _teamPlayers.find(p => (p.id || p.name) === pid || p.name === pid);
+      if (!player || !_activeSlot) return;
+      _titolari[_activeSlot] = player;
+      closePicker();
+      refreshPitch();
     });
   });
+
+  // Bench button
+  body.querySelectorAll(".picker-bench-btn").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const pid    = btn.closest(".picker-player-item").dataset.pid;
+      const player = _teamPlayers.find(p => (p.id || p.name) === pid || p.name === pid);
+      if (!player) return;
+      if (_panchina.length >= 12) {
+        const msg = document.getElementById("fm-stat-msg");
+        if (msg) { msg.textContent = "⚠ Panchina piena (max 12)"; setTimeout(() => msg.textContent = "", 2000); }
+        return;
+      }
+      _panchina.push(player);
+      // Rimuovi da titolari se era lì
+      for (const [sid, p] of Object.entries(_titolari)) {
+        if (p && (p.id || p.name) === (player.id || player.name)) delete _titolari[sid];
+      }
+      closePicker();
+      refreshPitch();
+    });
+  });
+}
+
+function pickerPlayerItem(player, compatible) {
+  const cost = player.currentCost || player.draftCost || 0;
+  return `
+    <div class="picker-player-item ${compatible ? "" : "picker-incompatible"}"
+         data-pid="${player.id || player.name}">
+      <span class="picker-role-badge" style="background:${roleColor(player.roles?.[0])}">${(player.roles||[]).join("/")}</span>
+      <div class="picker-player-info">
+        <span class="picker-player-name">${player.name}</span>
+        <span class="picker-player-sub">${player.team}</span>
+      </div>
+      <span class="picker-player-cost">${cost}FM</span>
+      <button class="picker-bench-btn btn btn-ghost btn-sm" title="Metti in panchina">🪑</button>
+    </div>`;
 }
 
 // ── SLOT EVENTS ───────────────────────────────────
 function bindSlotEvents() {
-  document.querySelectorAll(".field-slot").forEach(slot => {
-    slot.addEventListener("click", e => {
-      if (e.target.classList.contains("slot-remove")) return;
-      const slotId = slot.dataset.slot;
-      const player = _titolari[slotId];
-      if (player) {
-        // Click su slot occupato → seleziona per spostare (TODO drag&drop)
-        return;
-      }
-      // Slot vuoto → mostra giocatori compatibili (evidenzia nella lista)
-      const compatible = slot.dataset.compatible.split(",");
-      highlightCompatible(compatible);
+  document.querySelectorAll(".pitch-slot").forEach(slotEl => {
+    slotEl.addEventListener("click", e => {
+      if (e.target.classList.contains("slot-remove-btn") ||
+          e.target.closest(".slot-remove-btn")) return;
+      const slotId = slotEl.dataset.slot;
+      if (_activeSlot === slotId) { closePicker(); return; }
+      openPicker(slotId);
     });
   });
 
-  document.querySelectorAll(".slot-remove").forEach(btn => {
+  document.querySelectorAll(".slot-remove-btn").forEach(btn => {
     btn.addEventListener("click", e => {
       e.stopPropagation();
-      const slotId = btn.dataset.slot;
-      delete _titolari[slotId];
-      refreshField();
+      delete _titolari[btn.dataset.slot];
+      if (_activeSlot === btn.dataset.slot) closePicker();
+      refreshPitch();
     });
   });
-}
-
-function highlightCompatible(roles) {
-  document.querySelectorAll(".roster-item").forEach(item => {
-    const pid    = item.dataset.pid;
-    const player = _teamPlayers.find(p => (p.id || p.name) === pid);
-    if (!player) return;
-    const playerRoles = player.roles || [];
-    const ok = playerRoles.some(r => roles.includes(r));
-    item.style.background = ok ? "rgba(245,197,24,.08)" : "";
-    item.style.borderColor = ok ? "rgba(245,197,24,.2)" : "";
-  });
-  setTimeout(() => {
-    document.querySelectorAll(".roster-item").forEach(item => {
-      item.style.background = "";
-      item.style.borderColor = "";
-    });
-  }, 2000);
 }
 
 // ── LOAD / SAVE ───────────────────────────────────
 async function loadFormazione(teamId, gw) {
   const snap = await get(ref(db, `leagues/${_leagueId}/formations/${teamId}/${gw}`));
-  const data  = snap.val();
+  const data = snap.val();
   if (data) {
     _modulo   = data.modulo || "3-4-3";
     _titolari = data.titolari || {};
     _panchina = data.panchina || [];
-    // Aggiorna select modulo
     const sel = document.getElementById("fm-modulo-select");
     if (sel) sel.value = _modulo;
   } else {
     _titolari = {};
     _panchina = [];
   }
-  refreshField();
+  refreshPitch();
 }
 
 async function saveFormazione() {
@@ -344,20 +401,14 @@ async function saveFormazione() {
   const btn = document.getElementById("fm-save-btn");
   const msg = document.getElementById("fm-stat-msg");
   if (btn) { btn.disabled = true; btn.textContent = "⏳ Salvando..."; }
-
   try {
-    const data = {
-      teamId:    _teamId,
-      gw:        _gw,
-      modulo:    _modulo,
-      titolari:  _titolari,
-      panchina:  _panchina,
-      savedAt:   Date.now(),
-      savedBy:   _user.uid,
-    };
-    await set(ref(db, `leagues/${_leagueId}/formations/${_teamId}/${_gw}`), data);
+    await set(ref(db, `leagues/${_leagueId}/formations/${_teamId}/${_gw}`), {
+      teamId: _teamId, gw: _gw, modulo: _modulo,
+      titolari: _titolari, panchina: _panchina,
+      savedAt: Date.now(), savedBy: _user.uid,
+    });
     if (msg) { msg.textContent = "✓ Formazione salvata"; msg.style.color = "var(--green)"; }
-    setTimeout(() => { if (msg) { msg.textContent = ""; } }, 3000);
+    setTimeout(() => { if (msg) msg.textContent = ""; }, 3000);
   } catch(e) {
     if (msg) { msg.textContent = `✗ ${e.message}`; msg.style.color = "var(--red)"; }
   } finally {
@@ -368,37 +419,31 @@ async function saveFormazione() {
 
 // ── EVENTS ────────────────────────────────────────
 function bindFormazioniEvents(teams, myTeam, settings) {
-  // Cambio team (solo la propria squadra)
   document.getElementById("fm-team-select")?.addEventListener("change", async e => {
     if (e.target.value !== myTeam?.id) return;
-    _teamId = e.target.value;
-    const team = teams.find(t => t.id === _teamId);
-    _teamPlayers = Object.values(team?.players || {});
-    _titolari = {};
-    _panchina = [];
+    _teamId      = e.target.value;
+    _teamPlayers = Object.values(teams.find(t => t.id === _teamId)?.players || {});
+    _titolari = {}; _panchina = [];
     await loadFormazione(_teamId, _gw);
   });
 
-  // Cambio giornata
   document.getElementById("fm-gw-select")?.addEventListener("change", async e => {
     _gw = parseInt(e.target.value);
-    _titolari = {};
-    _panchina = [];
+    _titolari = {}; _panchina = [];
+    closePicker();
     if (_teamId) await loadFormazione(_teamId, _gw);
   });
 
-  // Cambio modulo
   document.getElementById("fm-modulo-select")?.addEventListener("change", e => {
     _modulo = e.target.value;
-    // Reset titolari che non sono compatibili con il nuovo modulo
+    // Riassegna giocatori esistenti agli slot compatibili
     const newSlots = MANTRA_MODULI[_modulo]?.slots || [];
     const newTit = {};
-    let slotIdx = 0;
-    // Cerca di riassegnare i giocatori esistenti ai nuovi slot compatibili
+    let idx = 0;
     for (const [, player] of Object.entries(_titolari)) {
       if (!player) continue;
-      while (slotIdx < newSlots.length) {
-        const slot = newSlots[slotIdx++];
+      while (idx < newSlots.length) {
+        const slot = newSlots[idx++];
         if (!newTit[slot.id] && isCompatible(player, slot)) {
           newTit[slot.id] = player;
           break;
@@ -406,52 +451,43 @@ function bindFormazioniEvents(teams, myTeam, settings) {
       }
     }
     _titolari = newTit;
-    refreshField();
+    closePicker();
+    refreshPitch();
   });
 
-  // Salva
   document.getElementById("fm-save-btn")?.addEventListener("click", saveFormazione);
 
-  // Carica
   document.getElementById("fm-load-btn")?.addEventListener("click", async () => {
     if (_teamId) await loadFormazione(_teamId, _gw);
   });
 
-  // Reset
   document.getElementById("fm-reset-btn")?.addEventListener("click", () => {
     if (!confirm("Resettare la formazione?")) return;
-    _titolari = {};
-    _panchina = [];
-    refreshField();
+    _titolari = {}; _panchina = [];
+    closePicker();
+    refreshPitch();
   });
 
-  // Filtri ruolo roster
-  document.getElementById("tab-formazioni")?.addEventListener("click", e => {
-    const roleBtn = e.target.closest(".role-btn");
-    if (!roleBtn) return;
-    document.querySelectorAll(".role-btn").forEach(b => b.classList.remove("active"));
-    roleBtn.classList.add("active");
-    refreshRoster();
-  });
+  document.getElementById("picker-close-btn")?.addEventListener("click", closePicker);
+  document.getElementById("fm-picker-backdrop")?.addEventListener("click", closePicker);
 
-  // Ricerca
-  document.getElementById("fm-search")?.addEventListener("input", refreshRoster);
+  document.getElementById("picker-search")?.addEventListener("input", e => {
+    _pickerSearch = e.target.value;
+    const slot = MANTRA_MODULI[_modulo]?.slots.find(s => s.id === _activeSlot);
+    if (slot) renderPickerPlayers(slot);
+  });
 
   bindSlotEvents();
 }
 
 // ── HELPERS ──────────────────────────────────────
 function isCompatible(player, slot) {
-  const playerRoles = player.roles || [];
-  return playerRoles.some(r => slot.compatible.includes(r));
+  return (player.roles || []).some(r => slot.compatible.includes(r));
 }
 
 function shortName(name) {
   if (!name) return "";
   const parts = name.split(" ");
   if (parts.length === 1) return name;
-  // Es: "Federico Chiesa" → "F. Chiesa"
-  return parts[0].length <= 3
-    ? name  // Nome corto tipo "Van", mantieni
-    : parts[0][0] + ". " + parts.slice(1).join(" ");
+  return parts[0].length <= 3 ? name : parts[0][0] + ". " + parts.slice(1).join(" ");
 }
