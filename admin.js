@@ -4,9 +4,10 @@
 // ============================================================
 
 import { db, ref, get, set, push, update, PATH_DB_GIOCATORI } from "./firebase.js";
-import { parseCSVRose, calcAge, getCapLevel, roleColor } from "./utils.js";
+import { parseCSVRose, calcAge, getCapLevel, roleColor, fpToGoals } from "./utils.js";
 import { generateRoundRobin } from "./classifica.js";
 import { applyDefaultContracts } from "./rose.js";
+import { calcLotteryProbabilities } from "./lottery.js";
 
 // ── INIT ─────────────────────────────────────────
 export async function renderAdmin(leagueId, league, user) {
@@ -25,21 +26,26 @@ export async function renderAdmin(leagueId, league, user) {
   const settings = league.settings || {};
 
   // Carica dati necessari
-  const [dbSnap, scheduleSnap, draftSnap] = await Promise.all([
+  const [dbSnap, scheduleSnap, draftSnap, lotterySnap, scoresSnap] = await Promise.all([
     get(ref(db, PATH_DB_GIOCATORI)),
     get(ref(db, `leagues/${leagueId}/schedule`)),
     get(ref(db, `leagues/${leagueId}/draftState`)),
+    get(ref(db, `leagues/${leagueId}/lottery`)),
+    get(ref(db, `leagues/${leagueId}/scores`)),
   ]);
-  const dbPlayers  = dbSnap.val()    || {};
-  const schedule   = scheduleSnap.val() || {};
-  const draftState = draftSnap.val();
+  const dbPlayers   = dbSnap.val()      || {};
+  const schedule    = scheduleSnap.val()|| {};
+  const draftState  = draftSnap.val();
+  const lotteryData = lotterySnap.val() || {};
+  const scores      = scoresSnap.val()  || {};
+  const standings   = calcAdminStandings(teams, scores, schedule);
 
-  el.innerHTML = buildAdminHTML(teams, settings, dbPlayers, schedule, draftState, leagueId);
-  bindAdminEvents(leagueId, league, teams, settings, schedule, draftState);
+  el.innerHTML = buildAdminHTML(teams, settings, dbPlayers, schedule, draftState, leagueId, lotteryData, standings);
+  bindAdminEvents(leagueId, league, teams, settings, schedule, draftState, lotteryData, standings);
 }
 
 // ── MAIN HTML ─────────────────────────────────────
-function buildAdminHTML(teams, settings, dbPlayers, schedule, draftState, leagueId) {
+function buildAdminHTML(teams, settings, dbPlayers, schedule, draftState, leagueId, lotteryData = {}, standings = []) {
   const dbCount      = Object.keys(dbPlayers).length;
   const scheduleGws  = Object.keys(schedule).length;
   const draftStatus  = draftState?.status || "idle";
@@ -70,6 +76,9 @@ function buildAdminHTML(teams, settings, dbPlayers, schedule, draftState, league
       ${adminSection("admin-s-scores",   "⚽", "Inserimento Voti / Punteggi", buildScoresSection(teams, settings))}
       ${adminSection("admin-s-contracts","📋", "Contratti Automatici", buildContractsSection(settings))}
       ${adminSection("admin-s-cap",      "💰", "Penalità & CAP", buildCapSection(teams, settings))}
+      ${adminSection("admin-s-lottery",  "🎰", "Lottery", buildLotteryAdminSection(lotteryData, standings))}
+      ${adminSection("admin-s-picks",    "🔄", "Scelte Draft", buildPickTransferSection(teams))}
+      ${adminSection("admin-s-playoff",  "🥊", "Risultati Playoff", buildPlayoffAdminSection(standings))}
       ${adminSection("admin-s-draft",    "📝", "Stato Draft", buildDraftSection(draftState, teams))}
       ${adminSection("admin-s-danger",   "🗑️", "Zona Pericolosa", buildDangerSection())}
 
@@ -470,7 +479,8 @@ function buildDraftSection(draftState, teams) {
 
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       ${status==="active"  ? `<button class="btn btn-secondary btn-sm" id="admin-draft-pause-btn">⏸ Pausa</button>
-                               <button class="btn btn-danger btn-sm"   id="admin-draft-end-btn">⏹ Termina</button>` : ""}
+                               <button class="btn btn-ghost    btn-sm" id="admin-draft-skip-btn">⏭ Salta turno</button>
+                               <button class="btn btn-danger   btn-sm" id="admin-draft-end-btn">⏹ Termina</button>` : ""}
       ${status==="paused"  ? `<button class="btn btn-primary btn-sm"   id="admin-draft-resume-btn">▶ Riprendi</button>
                                <button class="btn btn-danger btn-sm"   id="admin-draft-end-btn">⏹ Termina</button>` : ""}
       ${status==="done"||status==="idle" ? `<button class="btn btn-ghost btn-sm" id="admin-draft-reset-btn" style="color:var(--red)">↺ Reset Draft</button>` : ""}
@@ -514,6 +524,130 @@ function buildDangerSection() {
   `;
 }
 
+// ── LOTTERY ADMIN ─────────────────────────────────
+function buildLotteryAdminSection(lotteryData, standings) {
+  const lotteryDone = (lotteryData.results || []).length === 3;
+  return `
+    <p style="color:var(--text2);font-size:13px;margin-bottom:16px">
+      Esegui l'estrazione Lottery per determinare i primi 3 slot del Draft.
+      Le squadre top 3 in classifica regular season non partecipano.
+    </p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+      <button class="btn btn-primary" id="admin-lottery-simulate-btn">
+        🎰 ${lotteryDone ? "Riesegui" : "Simula"} Estrazione
+      </button>
+      ${lotteryDone ? `<button class="btn btn-ghost btn-sm" id="admin-lottery-reset-btn">↺ Reset</button>` : ""}
+      ${lotteryDone ? `<span style="color:var(--green);font-size:13px;font-weight:600">✓ Estrazione effettuata</span>` : ""}
+    </div>
+    ${lotteryDone && standings.length ? `
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+      ${(lotteryData.results || []).map(r => {
+        const s = standings.find(st => st.team.id === r.teamId);
+        return `<div style="background:var(--bg3);border:1px solid rgba(245,197,24,.3);border-radius:10px;padding:12px 20px;text-align:center">
+          <div style="font-size:11px;color:var(--text2)">Pick ${r.pick}</div>
+          <div style="font-family:'Outfit',sans-serif;font-size:22px;font-weight:900;color:var(--accent)">${r.pick}°</div>
+          <div style="font-weight:700;font-size:14px">${s?.team?.ownerName || "—"}</div>
+          <div style="font-size:11px;color:var(--text2)">${s?.team?.name || "—"}</div>
+        </div>`;
+      }).join("")}
+    </div>` : ""}
+    <div id="admin-lottery-error" class="form-error" style="margin-top:8px"></div>
+  `;
+}
+
+// ── PICK TRANSFER ─────────────────────────────────
+function buildPickTransferSection(teams) {
+  return `
+    <p style="color:var(--text2);font-size:13px;margin-bottom:14px">
+      Registra uno scambio di scelte draft tra due manager. Solo giri 1–3, max 3 stagioni avanti.
+    </p>
+    <div class="form-grid" style="margin-bottom:12px">
+      <div class="form-group">
+        <label class="form-label">Da squadra</label>
+        <select class="form-input" id="admin-pick-from">
+          <option value="">Seleziona</option>
+          ${teams.map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">A squadra</label>
+        <select class="form-input" id="admin-pick-to">
+          <option value="">Seleziona</option>
+          ${teams.map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Anno Draft</label>
+        <select class="form-input" id="admin-pick-year">
+          ${[0,1,2].map(i => { const y = new Date().getFullYear()+i; return `<option value="${y}">${y}</option>`; }).join("")}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Giro (1–3)</label>
+        <select class="form-input" id="admin-pick-round">
+          <option value="1">1° Giro</option>
+          <option value="2">2° Giro</option>
+          <option value="3">3° Giro</option>
+        </select>
+      </div>
+    </div>
+    <div id="admin-pick-error" class="form-error" style="margin-bottom:8px"></div>
+    <button class="btn btn-primary btn-sm" id="admin-pick-btn">Trasferisci scelta</button>
+  `;
+}
+
+// ── PLAYOFF ADMIN ─────────────────────────────────
+function buildPlayoffAdminSection(standings) {
+  const n = standings.length;
+  const s = (i) => standings[i]?.team?.name || `${i+1}° posto`;
+  return `
+    <p style="color:var(--text2);font-size:13px;margin-bottom:16px">
+      Inserisci i FantaPunti per ogni sfida playoff. I gol vengono calcolati automaticamente.
+      Usa questo pannello solo per correzioni manuali o se i voti non arrivano in automatico.
+    </p>
+    <div class="admin-section">
+      <h4 class="admin-section-title">Turno Preliminare (GW35)</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        ${buildPlayoffMatchInput("playin_match1", n >= 10 ? `${s(6)} vs ${s(9)}` : "7° vs 10°")}
+        ${buildPlayoffMatchInput("playin_match2", n >= 9  ? `${s(7)} vs ${s(8)}` : "8° vs 9°")}
+      </div>
+    </div>
+    <div class="admin-section" style="margin-top:16px">
+      <h4 class="admin-section-title">Quarti di Finale (GW36)</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        ${["qf1","qf2","qf3","qf4"].map(id => buildPlayoffMatchInput(id, id.toUpperCase())).join("")}
+      </div>
+    </div>
+    <div class="admin-section" style="margin-top:16px">
+      <h4 class="admin-section-title">Semifinali (GW37) · Finale (GW38)</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        ${["sf1","sf2","final"].map(id => buildPlayoffMatchInput(id, id === "final" ? "FINALE" : id.toUpperCase())).join("")}
+      </div>
+    </div>
+    <div id="admin-playoff-error" class="form-error" style="margin-top:8px"></div>
+    <button class="btn btn-primary btn-sm" id="admin-playoff-save-btn" style="margin-top:10px">
+      💾 Salva risultati playoff
+    </button>
+  `;
+}
+
+function buildPlayoffMatchInput(id, label) {
+  return `
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px">
+      <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:8px">${label}</div>
+      <div style="display:flex;gap:8px">
+        <div class="form-group" style="flex:1">
+          <label class="form-label">FP Top</label>
+          <input class="form-input" id="playoff-${id}-top" type="number" step="0.1" placeholder="Es. 87.5">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label class="form-label">FP Bot</label>
+          <input class="form-input" id="playoff-${id}-bot" type="number" step="0.1" placeholder="Es. 74.0">
+        </div>
+      </div>
+    </div>`;
+}
+
 // ── ACCORDION HELPER ──────────────────────────────
 function adminSection(id, icon, title, content) {
   return `
@@ -541,7 +675,7 @@ function kpi(icon, label, value, color) {
 }
 
 // ── EVENTS ────────────────────────────────────────
-async function bindAdminEvents(leagueId, league, teams, settings, schedule, draftState) {
+async function bindAdminEvents(leagueId, league, teams, settings, schedule, draftState, lotteryData = {}, standings = []) {
 
   // Accordion
   document.getElementById("tab-admin")?.addEventListener("click", e => {
@@ -964,6 +1098,101 @@ async function bindAdminEvents(leagueId, league, teams, settings, schedule, draf
   document.getElementById("admin-draft-resume-btn")?.addEventListener("click", async ()=>{ await update(ref(db,`leagues/${leagueId}/draftState`),{status:"active",turnStartedAt:Date.now()}); location.reload(); });
   document.getElementById("admin-draft-end-btn")?.addEventListener("click",    async ()=>{ if(confirm("Terminare il draft?")) { await update(ref(db,`leagues/${leagueId}/draftState`),{status:"done"}); location.reload(); } });
   document.getElementById("admin-draft-reset-btn")?.addEventListener("click",  async ()=>{ if(confirm("Reset draft? I giocatori nelle rose NON vengono rimossi.")) { await set(ref(db,`leagues/${leagueId}/draftState`),{status:"idle"}); location.reload(); } });
+  document.getElementById("admin-draft-skip-btn")?.addEventListener("click", async () => {
+    if (!confirm("Saltare il turno corrente?")) return;
+    const dsSnap = await get(ref(db, `leagues/${leagueId}/draftState`));
+    const ds = dsSnap.val();
+    if (!ds || ds.status !== "active") return;
+    await push(ref(db, `leagues/${leagueId}/draftState/picks`), {
+      teamId: "skip", playerName: "SKIP", skipped: true, pickedAt: Date.now(),
+    });
+    await update(ref(db, `leagues/${leagueId}/draftState`), { turnStartedAt: Date.now() });
+    showStatus("danger-error", "✓ Turno saltato", "green");
+  });
+
+  // ── LOTTERY ──
+  document.getElementById("admin-lottery-simulate-btn")?.addEventListener("click", async () => {
+    const lotteryTeams = calcLotteryProbabilities(standings);
+    if (!lotteryTeams.length) { alert("Nessuna squadra partecipante alla Lottery (serve almeno la classifica regular season)"); return; }
+    if ((lotteryData.results || []).length === 3) {
+      if (!confirm("La Lottery è già stata eseguita. Vuoi rieseguirla? I risultati precedenti verranno sovrascritti.")) return;
+    }
+    const btn = document.getElementById("admin-lottery-simulate-btn");
+    btn.disabled = true; btn.textContent = "🎰 Estrazione in corso...";
+    await adminAnimateExtraction(lotteryTeams, async (results) => {
+      try {
+        await set(ref(db, `leagues/${leagueId}/lottery/results`), results);
+        await set(ref(db, `leagues/${leagueId}/lottery/executedAt`), Date.now());
+        showStatus("admin-lottery-error", "✓ Lottery completata e salvata", "green");
+        setTimeout(() => location.reload(), 1000);
+      } catch(e) { alert("Errore nel salvataggio: " + e.message); }
+    });
+    btn.disabled = false; btn.textContent = "🎰 Simula Estrazione";
+  });
+
+  document.getElementById("admin-lottery-reset-btn")?.addEventListener("click", async () => {
+    if (!confirm("Resettare i risultati della Lottery?")) return;
+    await set(ref(db, `leagues/${leagueId}/lottery`), null);
+    showStatus("admin-lottery-error", "✓ Lottery resettata", "green");
+    setTimeout(() => location.reload(), 800);
+  });
+
+  // ── SCELTE DRAFT ──
+  document.getElementById("admin-pick-btn")?.addEventListener("click", async () => {
+    const fromId  = document.getElementById("admin-pick-from").value;
+    const toId    = document.getElementById("admin-pick-to").value;
+    const year    = document.getElementById("admin-pick-year").value;
+    const round   = document.getElementById("admin-pick-round").value;
+    const errEl   = document.getElementById("admin-pick-error");
+    errEl.textContent = "";
+    if (!fromId || !toId) { errEl.textContent = "Seleziona entrambe le squadre"; return; }
+    if (fromId === toId)  { errEl.textContent = "Le squadre devono essere diverse"; return; }
+    const fromTeam = teams.find(t => t.id === fromId);
+    const toTeam   = teams.find(t => t.id === toId);
+    const pickKey  = `${year}_round${round}`;
+    try {
+      const pickData = {
+        year: parseInt(year), round: parseInt(round),
+        fromTeamId: fromId, fromTeamName: fromTeam.name,
+        toTeamId: toId, toTeamName: toTeam.name,
+        ownerTeamId: toId, transferredAt: Date.now(),
+      };
+      await update(ref(db, `leagues/${leagueId}/teams/${toId}/draftPicks`), { [pickKey]: pickData });
+      await update(ref(db, `leagues/${leagueId}/teams/${fromId}/draftPicks`), {
+        [pickKey]: { ...pickData, ownerTeamId: toId, traded: true },
+      });
+      showStatus("admin-pick-error", `✓ Scelta ${year} giro ${round} trasferita da ${fromTeam.name} a ${toTeam.name}`, "green");
+    } catch(e) { errEl.style.color="var(--red)"; errEl.textContent = e.message; }
+  });
+
+  // ── PLAYOFF ──
+  document.getElementById("admin-playoff-save-btn")?.addEventListener("click", async () => {
+    const btn   = document.getElementById("admin-playoff-save-btn");
+    const errEl = document.getElementById("admin-playoff-error");
+    btn.disabled = true; btn.textContent = "⏳ Salvando...";
+    try {
+      const updates = {};
+      const matchIds = ["playin_match1","playin_match2","qf1","qf2","qf3","qf4","sf1","sf2","final"];
+      for (const id of matchIds) {
+        const topEl = document.getElementById(`playoff-${id}-top`);
+        const botEl = document.getElementById(`playoff-${id}-bot`);
+        if (!topEl || !botEl) continue;
+        const fpTop = parseFloat(topEl.value);
+        const fpBot = parseFloat(botEl.value);
+        if (isNaN(fpTop) || isNaN(fpBot)) continue;
+        const golTop   = fpToGoals(fpTop);
+        const golBot   = fpToGoals(fpBot);
+        const winnerId = golTop > golBot ? "top" : golBot > golTop ? "bot" : null;
+        const path = id.startsWith("playin_")
+          ? `leagues/${leagueId}/playoff/playin/${id.replace("playin_","")}`
+          : `leagues/${leagueId}/playoff/bracket/${id}`;
+        updates[path] = { fpTop, fpBot, golTop, golBot, winnerId };
+      }
+      await update(ref(db), updates);
+      showStatus("admin-playoff-error", "✓ Risultati playoff salvati", "green");
+    } catch(e) { errEl.style.color="var(--red)"; errEl.textContent = e.message; }
+    finally { btn.disabled = false; btn.textContent = "💾 Salva risultati playoff"; }
+  });
 
   // ── ZONA PERICOLOSA ──
   document.getElementById("danger-clear-scores-btn")?.addEventListener("click", async () => {
@@ -1099,3 +1328,99 @@ function calcCapLevel(cap, settings) {
   if (cap <= luxuryTaxThreshold)  return "hard";
   return "luxury";
 }
+
+// ── STANDINGS HELPER ──────────────────────────────
+function calcAdminStandings(teams, scores, schedule) {
+  const map = {};
+  for (const t of teams) map[t.id] = { team: t, pt:0, v:0, p:0, s:0, gf:0, gs:0, fp:0 };
+  for (const [gw, matches] of Object.entries(schedule)) {
+    if (parseInt(gw) > 34) continue;
+    for (const m of (matches||[])) {
+      const h = scores[m.homeId]?.[gw]; const a = scores[m.awayId]?.[gw];
+      if (!h||!a||!map[m.homeId]||!map[m.awayId]) continue;
+      const hG = fpToGoals(h.fp||0); const aG = fpToGoals(a.fp||0);
+      map[m.homeId].fp += h.fp||0; map[m.awayId].fp += a.fp||0;
+      map[m.homeId].gf += hG; map[m.homeId].gs += aG;
+      map[m.awayId].gf += aG; map[m.awayId].gs += hG;
+      if (hG > aG)      { map[m.homeId].v++; map[m.homeId].pt+=3; map[m.awayId].s++; }
+      else if (aG > hG) { map[m.awayId].v++; map[m.awayId].pt+=3; map[m.homeId].s++; }
+      else              { map[m.homeId].p++; map[m.homeId].pt++; map[m.awayId].p++; map[m.awayId].pt++; }
+    }
+  }
+  return Object.values(map).sort((a,b)=>(b.pt-a.pt)||(b.v-a.v)||((b.gf-b.gs)-(a.gf-a.gs))||(b.fp-a.fp));
+}
+
+// ── LOTTERY ANIMATION ─────────────────────────────
+function adminSimulateExtraction(lotteryTeams) {
+  const pool = [];
+  for (const t of lotteryTeams) {
+    const tickets = Math.round(t.finalPct * 10);
+    for (let i = 0; i < tickets; i++) pool.push(t.team.id);
+  }
+  const results = [];
+  const usedTeams = new Set();
+  const remaining = [...pool];
+  for (let pick = 1; pick <= 3; pick++) {
+    if (!remaining.length) break;
+    const eligible = remaining.filter(id => !usedTeams.has(id));
+    if (!eligible.length) break;
+    const idx = Math.floor(Math.random() * eligible.length);
+    const teamId = eligible[idx];
+    usedTeams.add(teamId);
+    results.push({ pick, teamId });
+    for (let i = remaining.length - 1; i >= 0; i--) {
+      if (remaining[i] === teamId) remaining.splice(i, 1);
+    }
+  }
+  return results;
+}
+
+async function adminAnimateExtraction(lotteryTeams, onComplete) {
+  const results = adminSimulateExtraction(lotteryTeams);
+  const container = document.createElement("div");
+  container.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:20px";
+  document.body.appendChild(container);
+
+  for (const r of results) {
+    const team = lotteryTeams.find(t => t.team.id === r.teamId);
+    container.innerHTML = `
+      <div style="text-align:center">
+        <div style="font-size:48px;margin-bottom:16px">🎰</div>
+        <div style="color:var(--text2);font-size:14px;margin-bottom:8px;letter-spacing:2px">PICK ${r.pick}</div>
+        <div style="font-family:'Outfit',sans-serif;font-size:48px;font-weight:900;color:var(--accent)">${team?.team.ownerName || "—"}</div>
+        <div style="color:var(--text2);font-size:16px;margin-top:8px">${team?.team.name}</div>
+        <div style="color:var(--text3);font-size:13px;margin-top:4px">${team?.pos}° classificato · ${team?.finalPct}% probabilità</div>
+        ${r.pick < 3 ? `<div style="color:var(--text3);font-size:12px;margin-top:24px">Prossima estrazione tra 3 secondi...</div>` : ""}
+      </div>`;
+    await adminSleep(r.pick < 3 ? 3000 : 1500);
+  }
+
+  container.innerHTML = `
+    <div style="text-align:center">
+      <div style="font-size:48px;margin-bottom:16px">✅</div>
+      <div style="font-family:'Outfit',sans-serif;font-size:28px;font-weight:800;color:var(--green)">Estrazione completata!</div>
+      <div style="margin-top:20px;display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+        ${results.map(r => {
+          const team = lotteryTeams.find(t => t.team.id === r.teamId);
+          return `<div style="background:rgba(245,197,24,.1);border:1px solid rgba(245,197,24,.3);border-radius:10px;padding:12px 20px;text-align:center">
+            <div style="color:var(--accent);font-weight:800;font-size:20px">${r.pick}°</div>
+            <div style="font-weight:700">${team?.team.ownerName}</div>
+          </div>`;
+        }).join("")}
+      </div>
+      <button id="lottery-anim-close" style="margin-top:24px;background:var(--accent);color:#000;border:none;padding:12px 32px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer">
+        Chiudi
+      </button>
+    </div>`;
+
+  await new Promise(resolve => {
+    document.getElementById("lottery-anim-close")?.addEventListener("click", () => {
+      document.body.removeChild(container);
+      resolve();
+    });
+  });
+
+  await onComplete(results);
+}
+
+function adminSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
