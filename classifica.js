@@ -10,7 +10,6 @@ import { SERIE_A_MATCHES } from "./matches.js";
 // ── INIT ─────────────────────────────────────────
 export async function renderClassifica(leagueId, league, user) {
   const el      = document.getElementById("tab-classifica");
-  const isAdmin = league.commissionerUid === user.uid;
   const teams   = Object.values(league.teams || {});
   const settings = league.settings || {};
 
@@ -84,11 +83,9 @@ export async function renderClassifica(leagueId, league, user) {
       </div>
     </div>
 
-    <!-- ADMIN: GENERA CALENDARIO -->
-    ${isAdmin ? buildAdminCalendarioPanel(teams, settings, schedule, leagueId) : ""}
   `;
 
-  bindClassificaEvents(leagueId, league, teams, settings, scores, schedule, isAdmin);
+  bindClassificaEvents(leagueId, league, teams, settings, scores, schedule);
 }
 
 // ── STANDINGS DA FIREBASE (calcolati dal poller) ──
@@ -266,53 +263,6 @@ function buildResultRow(match, scores, teams, gw) {
     </div>`;
 }
 
-// ── ADMIN: CALENDARIO ─────────────────────────────
-function buildAdminCalendarioPanel(teams, settings, schedule, leagueId) {
-  const hasSchedule = Object.keys(schedule).length > 0;
-  return `
-    <div class="card" style="border-color:rgba(245,197,24,.2)">
-      <h3 style="font-size:15px;margin-bottom:16px">⚙️ Admin — Genera Calendario</h3>
-
-      <div style="color:var(--text2);font-size:13px;margin-bottom:16px;line-height:1.6">
-        Il calendario viene generato con sistema <strong style="color:var(--text)">round-robin bilanciato</strong>.
-        Ogni squadra affronta tutte le altre in modo equo.
-        Con numero dispari di squadre, una squadra riposa (BYE) ogni giornata, ruotando.<br>
-        <strong style="color:var(--orange)">⚠ La rigenerazione sovrascrive il calendario esistente.</strong>
-      </div>
-
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
-        <div class="form-group">
-          <label class="form-label">GW Inizio</label>
-          <input class="form-input" id="cal-gw-start" type="number"
-            min="1" max="10" value="${settings.gwStart || 1}" style="width:80px">
-        </div>
-        <div class="form-group">
-          <label class="form-label">GW Fine</label>
-          <input class="form-input" value="34" disabled style="width:80px">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Squadre</label>
-          <input class="form-input" value="${teams.length}" disabled style="width:80px">
-        </div>
-      </div>
-
-      ${hasSchedule ? `
-        <div style="background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--orange)">
-          ⚠ Calendario già generato con ${Object.keys(schedule).length} giornate. La rigenerazione lo sovrascriverà.
-        </div>` : ""}
-
-      <div id="cal-gen-error" class="form-error" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" id="cal-generate-btn">
-          🗓 ${hasSchedule ? "Rigenera" : "Genera"} Calendario
-        </button>
-        ${hasSchedule ? `<button class="btn btn-ghost btn-sm" id="cal-preview-btn">👁 Anteprima</button>` : ""}
-      </div>
-
-      <div id="cal-preview-wrap" class="hidden" style="margin-top:20px"></div>
-    </div>`;
-}
-
 // ── ROUND-ROBIN GENERATOR ─────────────────────────
 export function generateRoundRobin(teamIds, gwStart, gwEnd) {
   const n    = teamIds.length;
@@ -363,8 +313,7 @@ export function generateRoundRobin(teamIds, gwStart, gwEnd) {
 }
 
 // ── EVENTS ────────────────────────────────────────
-function bindClassificaEvents(leagueId, league, teams, settings, scores, schedule, isAdmin) {
-  // Accordion risultati
+function bindClassificaEvents(leagueId, league, teams, settings, scores, schedule) {
   document.getElementById("tab-classifica")?.addEventListener("click", e => {
     const header = e.target.closest(".acc-header");
     if (!header) return;
@@ -375,74 +324,5 @@ function bindClassificaEvents(leagueId, league, teams, settings, scores, schedul
       header.querySelector(".acc-chevron").textContent =
         body.classList.contains("hidden") ? "▼" : "▲";
     }
-  });
-
-  if (!isAdmin) return;
-
-  // Genera calendario
-  document.getElementById("cal-generate-btn")?.addEventListener("click", async () => {
-    const btn   = document.getElementById("cal-generate-btn");
-    const errEl = document.getElementById("cal-gen-error");
-    const gwStart = parseInt(document.getElementById("cal-gw-start").value) || settings.gwStart || 1;
-    const gwEnd   = settings.gwEnd || 34;
-
-    if (teams.length < 2) { errEl.textContent = "Servono almeno 2 squadre"; return; }
-    if (!confirm(`Generare il calendario dalla GW${gwStart} alla GW${gwEnd} con ${teams.length} squadre?`)) return;
-
-    btn.disabled = true; btn.textContent = "⏳ Generazione..."; errEl.textContent = "";
-
-    try {
-      const teamIds   = teams.map(t => t.id);
-      const newSched  = generateRoundRobin(teamIds, gwStart, gwEnd);
-      await set(ref(db, `leagues/${leagueId}/schedule`), newSched);
-
-      // Aggiorna gwStart nelle settings
-      await update(ref(db, `leagues/${leagueId}/settings`), { gwStart });
-
-      errEl.style.color = "var(--green)";
-      errEl.textContent = `✓ Calendario generato: ${Object.keys(newSched).length} giornate, ${teams.length} squadre`;
-
-      // Rigenera la vista
-      const { renderClassifica } = await import("./classifica.js");
-      const snap = await get(ref(db, `leagues/${leagueId}`));
-      renderClassifica(leagueId, snap.val(), { uid: league.commissionerUid, displayName: "" });
-    } catch(e) {
-      errEl.style.color = "var(--red)";
-      errEl.textContent = `✗ ${e.message}`;
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "🗓 Rigenera Calendario";
-    }
-  });
-
-  // Anteprima
-  document.getElementById("cal-preview-btn")?.addEventListener("click", () => {
-    const wrap = document.getElementById("cal-preview-wrap");
-    if (!wrap) return;
-    if (!wrap.classList.contains("hidden")) { wrap.classList.add("hidden"); return; }
-
-    const gwStart = settings.gwStart || 1;
-    const gwEnd   = settings.gwEnd   || 34;
-    let html = `<div style="font-size:13px;color:var(--text2);margin-bottom:10px">Anteprima prime 5 giornate:</div>`;
-
-    for (let gw = gwStart; gw <= Math.min(gwStart + 4, gwEnd); gw++) {
-      const matches = schedule[String(gw)] || [];
-      html += `<div style="margin-bottom:12px">
-        <div style="font-weight:700;font-size:12px;color:var(--accent);margin-bottom:6px">GW${gw}</div>
-        ${matches.map(m => {
-          const h = teams.find(t => t.id === m.homeId);
-          const a = teams.find(t => t.id === m.awayId);
-          return `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);display:flex;gap:8px">
-            <span style="flex:1;text-align:right">${h?.name || "?"}</span>
-            <span style="color:var(--text3)">vs</span>
-            <span style="flex:1">${a?.name || "?"}</span>
-          </div>`;
-        }).join("")}
-        ${matches.length === 0 ? `<div style="color:var(--text3);font-size:12px">BYE</div>` : ""}
-      </div>`;
-    }
-
-    wrap.innerHTML = html;
-    wrap.classList.remove("hidden");
   });
 }

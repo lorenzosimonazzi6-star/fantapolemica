@@ -4,7 +4,7 @@
 // ordine draft finale (giri 2+)
 // ============================================================
 
-import { db, ref, get, set, update } from "./firebase.js";
+import { db, ref, get } from "./firebase.js";
 import { fpToGoals } from "./utils.js";
 
 // Probabilità base per posizione (4°–10°)
@@ -14,7 +14,6 @@ const BASE_PROBS = { 4:10, 5:10, 6:10, 7:15, 8:15, 9:20, 10:20 };
 // ── INIT ─────────────────────────────────────────
 export async function renderLottery(leagueId, league, user) {
   const el      = document.getElementById("tab-lottery");
-  const isAdmin = league.commissionerUid === user.uid;
   const teams   = Object.values(league.teams || {});
   const settings = league.settings || {};
 
@@ -38,8 +37,8 @@ export async function renderLottery(leagueId, league, user) {
   // Ordine giri 2+ (inverso classifica RS)
   const draftOrder = calcDraftOrder(standings, lotteryData);
 
-  el.innerHTML = buildLotteryHTML(standings, lotteryTeams, draftOrder, lotteryData, isAdmin, leagueId);
-  bindLotteryEvents(leagueId, lotteryTeams, standings, draftOrder, lotteryData, isAdmin);
+  el.innerHTML = buildLotteryHTML(standings, lotteryTeams, draftOrder, lotteryData);
+  bindLotteryEvents();
 }
 
 // ── STANDINGS ─────────────────────────────────────
@@ -115,37 +114,6 @@ function calcDraftOrder(standings, lotteryData) {
   const round1 = lotteryData.results || []; // [{ teamId, pick: 1|2|3 }]
 
   return { reverseOrder, round1 };
-}
-
-// ── SIMULATION ────────────────────────────────────
-function simulateExtraction(lotteryTeams) {
-  // 3 estrazioni sequenziali senza rimpiazzo
-  const pool  = [];
-  for (const t of lotteryTeams) {
-    // Ogni squadra ha finalPct × 10 biglietti (arrotondato)
-    const tickets = Math.round(t.finalPct * 10);
-    for (let i = 0; i < tickets; i++) pool.push(t.team.id);
-  }
-
-  const results = [];
-  const usedTeams = new Set();
-  const remaining = [...pool];
-
-  for (let pick = 1; pick <= 3; pick++) {
-    if (!remaining.length) break;
-    // Filtra biglietti di squadre già estratte
-    const eligible = remaining.filter(id => !usedTeams.has(id));
-    if (!eligible.length) break;
-    const idx    = Math.floor(Math.random() * eligible.length);
-    const teamId = eligible[idx];
-    usedTeams.add(teamId);
-    results.push({ pick, teamId });
-    // Rimuovi tutti i biglietti di questa squadra
-    for (let i = remaining.length - 1; i >= 0; i--) {
-      if (remaining[i] === teamId) remaining.splice(i, 1);
-    }
-  }
-  return results;
 }
 
 // ── DRAFT ORDER TABLE (tutti i giri) ─────────────
@@ -230,7 +198,7 @@ function buildDraftOrderTable(standings, lotteryData, lotteryTeams) {
 }
 
 // ── HTML ──────────────────────────────────────────
-function buildLotteryHTML(standings, lotteryTeams, draftOrder, lotteryData, isAdmin, leagueId) {
+function buildLotteryHTML(standings, lotteryTeams, draftOrder, lotteryData) {
   const lotteryDone   = (lotteryData.results || []).length === 3;
   const currentYear   = new Date().getFullYear();
 
@@ -246,18 +214,6 @@ function buildLotteryHTML(standings, lotteryTeams, draftOrder, lotteryData, isAd
       Le squadre 4°–10° partecipano con probabilità corrette per anti-tanking.
       I primi 3 classificati non partecipano alla Lottery.
     </div>
-
-    <!-- SIMULAZIONE -->
-    ${isAdmin ? `
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:24px;flex-wrap:wrap">
-      <button class="btn btn-primary" id="lottery-simulate-btn">
-        🎰 Simula Estrazione
-      </button>
-      <button class="btn btn-ghost btn-sm" id="lottery-reset-btn">
-        ↺ Reset
-      </button>
-      ${lotteryDone ? `<span style="color:var(--green);font-size:13px;font-weight:600">✓ Estrazione effettuata</span>` : ""}
-    </div>` : ""}
 
     <!-- RISULTATO ESTRAZIONE -->
     ${lotteryDone ? buildExtractionResult(lotteryData.results, standings) : ""}
@@ -339,97 +295,7 @@ function buildExtractionResult(results, standings) {
 }
 
 // ── EVENTS ────────────────────────────────────────
-function bindLotteryEvents(leagueId, lotteryTeams, standings, draftOrder, lotteryData, isAdmin) {
-  if (!isAdmin) return;
-
-  document.getElementById("lottery-simulate-btn")?.addEventListener("click", async () => {
-    const btn = document.getElementById("lottery-simulate-btn");
-    if (!lotteryTeams.length) { alert("Nessuna squadra partecipante alla Lottery"); return; }
-    if ((lotteryData.results || []).length === 3) {
-      if (!confirm("La Lottery è già stata eseguita. Vuoi rieseguirla? I risultati precedenti verranno sovrascritti.")) return;
-    }
-
-    btn.disabled = true; btn.textContent = "🎰 Estrazione in corso...";
-
-    // Animazione drammatica
-    await animateExtraction(lotteryTeams, async (results) => {
-      try {
-        await set(ref(db, `leagues/${leagueId}/lottery/results`), results);
-        await set(ref(db, `leagues/${leagueId}/lottery/executedAt`), Date.now());
-        await set(ref(db, `leagues/${leagueId}/lottery/executedBy`), leagueId);
-
-        // Refresh
-        const { renderLottery } = await import("./lottery.js");
-        const snap = await get(ref(db, `leagues/${leagueId}`));
-        renderLottery(leagueId, snap.val(), { uid: snap.val().commissionerUid });
-      } catch(e) {
-        alert("Errore nel salvataggio: " + e.message);
-      }
-    });
-
-    btn.disabled = false; btn.textContent = "🎰 Simula Estrazione";
-  });
-
-  document.getElementById("lottery-reset-btn")?.addEventListener("click", async () => {
-    if (!confirm("Resettare i risultati della Lottery?")) return;
-    await set(ref(db, `leagues/${leagueId}/lottery`), null);
-    const { renderLottery } = await import("./lottery.js");
-    const snap = await get(ref(db, `leagues/${leagueId}`));
-    renderLottery(leagueId, snap.val(), { uid: snap.val().commissionerUid });
-  });
+function bindLotteryEvents() {
+  // No admin actions available for regular users
 }
 
-// ── EXTRACT ANIMATION ─────────────────────────────
-async function animateExtraction(lotteryTeams, onComplete) {
-  const results = simulateExtraction(lotteryTeams);
-
-  // Mostra animazione pick per pick
-  const container = document.createElement("div");
-  container.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:20px";
-  document.body.appendChild(container);
-
-  for (const r of results) {
-    const team = lotteryTeams.find(t => t.team.id === r.teamId);
-    container.innerHTML = `
-      <div style="text-align:center">
-        <div style="font-size:48px;margin-bottom:16px">🎰</div>
-        <div style="color:var(--text2);font-size:14px;margin-bottom:8px;letter-spacing:2px">PICK ${r.pick}</div>
-        <div style="font-family:'Outfit',sans-serif;font-size:48px;font-weight:900;color:var(--accent);animation:pulse 0.5s ease-in-out">
-          ${team?.team.ownerName || "—"}
-        </div>
-        <div style="color:var(--text2);font-size:16px;margin-top:8px">${team?.team.name}</div>
-        <div style="color:var(--text3);font-size:13px;margin-top:4px">${team?.pos}° classificato · ${team?.finalPct}% probabilità</div>
-        ${r.pick < 3 ? `<div style="color:var(--text3);font-size:12px;margin-top:24px">Prossima estrazione tra 3 secondi...</div>` : ""}
-      </div>`;
-    await sleep(r.pick < 3 ? 3000 : 1500);
-  }
-
-  container.innerHTML = `
-    <div style="text-align:center">
-      <div style="font-size:48px;margin-bottom:16px">✅</div>
-      <div style="font-family:'Outfit',sans-serif;font-size:28px;font-weight:800;color:var(--green)">Estrazione completata!</div>
-      <div style="margin-top:20px;display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
-        ${results.map(r => {
-          const team = lotteryTeams.find(t => t.team.id === r.teamId);
-          return `<div style="background:rgba(245,197,24,.1);border:1px solid rgba(245,197,24,.3);border-radius:10px;padding:12px 20px;text-align:center">
-            <div style="color:var(--accent);font-weight:800;font-size:20px">${r.pick}°</div>
-            <div style="font-weight:700">${team?.team.ownerName}</div>
-          </div>`;
-        }).join("")}
-      </div>
-      <button id="lottery-anim-close" style="margin-top:24px;background:var(--accent);color:#000;border:none;padding:12px 32px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer">
-        Chiudi
-      </button>
-    </div>`;
-
-  await new Promise(resolve => {
-    document.getElementById("lottery-anim-close")?.addEventListener("click", () => {
-      document.body.removeChild(container);
-      resolve();
-    });
-  });
-
-  await onComplete(results);
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

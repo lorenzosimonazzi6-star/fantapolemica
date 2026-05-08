@@ -568,7 +568,7 @@ async function bindAdminEvents(leagueId, league, teams, settings, schedule, draf
   });
 
   // Ricerca giocatore nel DB
-  const dbSnap = await get(ref(db, `db_giocatori/${leagueId}`));
+  const dbSnap = await get(ref(db, PATH_DB_GIOCATORI));
   const dbPlayers = dbSnap.val() || {};
 
   document.getElementById("rm-search-player")?.addEventListener("input", e => {
@@ -766,28 +766,6 @@ async function bindAdminEvents(leagueId, league, teams, settings, schedule, draf
       setTimeout(() => errEl.textContent = "", 3000);
     } catch(e) { errEl.style.color="var(--red)"; errEl.textContent = e.message; }
     finally { btn.disabled=false; btn.textContent="💾 Salva impostazioni"; }
-  });
-
-  // ── DB GIOCATORI ──
-  const csvInput = document.getElementById("admin-csv-input");
-  csvInput?.addEventListener("change", () => handleCSVUpload(leagueId));
-
-  const zone = document.getElementById("admin-csv-zone");
-  zone?.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("drag-over"); });
-  zone?.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
-  zone?.addEventListener("drop", e => {
-    e.preventDefault(); zone.classList.remove("drag-over");
-    if (e.dataTransfer.files[0]) {
-      csvInput.files = e.dataTransfer.files;
-      handleCSVUpload(leagueId);
-    }
-  });
-
-  document.getElementById("admin-clear-db-btn")?.addEventListener("click", async () => {
-    if (!confirm("Svuotare il database giocatori? Questa azione è irreversibile.")) return;
-    await set(ref(db, `db_giocatori/${leagueId}`), null);
-    showStatus("admin-csv-status", "✓ Database svuotato", "green");
-    setTimeout(() => location.reload(), 1000);
   });
 
   // ── MANAGER ──
@@ -1008,45 +986,6 @@ async function bindAdminEvents(leagueId, league, teams, settings, schedule, draf
     showStatus("danger-error","✓ Rose svuotate","green");
     setTimeout(() => location.reload(), 800);
   });
-}
-
-// ── CSV UPLOAD ────────────────────────────────────
-async function handleCSVUpload(leagueId) {
-  const input  = document.getElementById("admin-csv-input");
-  const status = document.getElementById("admin-csv-status");
-  const file   = input?.files?.[0];
-  if (!file) return;
-
-  status.style.color = "var(--text2)";
-  status.textContent = "⏳ Caricamento in corso...";
-
-  try {
-    const text    = await file.text();
-    const players = parseCSVRose(text);
-    if (!players.length) throw new Error("Nessun giocatore trovato nel CSV");
-
-    // Carica in chunks da 200
-    const chunks = [];
-    for (let i = 0; i < players.length; i += 200) chunks.push(players.slice(i, i+200));
-
-    let count = 0;
-    for (const chunk of chunks) {
-      const updates = {};
-      for (const p of chunk) {
-        const key = p.name.replace(/[.#$[\]]/g, "_");
-        updates[key] = p;
-        count++;
-      }
-      await update(ref(db, `db_giocatori/${leagueId}`), updates);
-    }
-
-    status.style.color = "var(--green)";
-    status.textContent = `✓ ${count} giocatori caricati da ${file.name}`;
-    setTimeout(() => location.reload(), 1500);
-  } catch(e) {
-    status.style.color = "var(--red)";
-    status.textContent = `✗ Errore: ${e.message}`;
-  }
 }
 
 // ── UTILS ─────────────────────────────────────────

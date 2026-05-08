@@ -4,13 +4,12 @@
 // Fattore campo +2 solo nel turno preliminare
 // ============================================================
 
-import { db, ref, get, set, update } from "./firebase.js";
+import { db, ref, get } from "./firebase.js";
 import { fpToGoals } from "./utils.js";
 
 // ── INIT ─────────────────────────────────────────
 export async function renderPlayoff(leagueId, league, user) {
   const el       = document.getElementById("tab-playoff");
-  const isAdmin  = league.commissionerUid === user.uid;
   const teams    = Object.values(league.teams || {});
   const settings = league.settings || {};
 
@@ -28,8 +27,8 @@ export async function renderPlayoff(leagueId, league, user) {
   // Calcola standings regular season (GW1-34)
   const standings = calcStandings(teams, scores, schedule, settings);
 
-  el.innerHTML = buildPlayoffHTML(playoff, standings, teams, scores, settings, isAdmin, leagueId);
-  bindPlayoffEvents(leagueId, league, playoff, standings, teams, scores, settings, isAdmin);
+  el.innerHTML = buildPlayoffHTML(playoff, standings, teams, scores, settings);
+  bindPlayoffEvents();
 }
 
 // ── STANDINGS (dalla classifica) ──────────────────
@@ -61,7 +60,7 @@ function calcStandings(teams, scores, schedule, settings) {
 }
 
 // ── MAIN HTML ─────────────────────────────────────
-function buildPlayoffHTML(playoff, standings, teams, scores, settings, isAdmin, leagueId) {
+function buildPlayoffHTML(playoff, standings, teams, scores, settings) {
   const hfBonus = settings.homefieldBonus || 2;
   const n       = standings.length;
 
@@ -128,9 +127,6 @@ function buildPlayoffHTML(playoff, standings, teams, scores, settings, isAdmin, 
       W(P1) = vincitore sfida 7°/10° (affronta 2°) ·
       W(P2) = vincitore sfida 8°/9° (affronta 1°)
     </div>
-
-    <!-- ADMIN PANEL -->
-    ${isAdmin ? buildAdminPlayoffPanel(standings, playin, bracket, n) : ""}
   `;
 }
 
@@ -292,117 +288,7 @@ function buildBracketMatch(match, bracket, scores) {
     </div>`;
 }
 
-// ── ADMIN PANEL ───────────────────────────────────
-function buildAdminPlayoffPanel(standings, playin, bracket, n) {
-  return `
-    <div class="card" style="margin-top:24px;border-color:rgba(245,197,24,.2)">
-      <h3 style="font-size:15px;margin-bottom:16px">⚙️ Admin — Inserisci Risultati Playoff</h3>
-      <p style="color:var(--text2);font-size:13px;margin-bottom:16px">
-        I risultati si calcolano automaticamente dai voti Sofascore.
-        Usa questo pannello solo per correzioni manuali o se i voti non sono disponibili.
-      </p>
-
-      <!-- PLAY-IN -->
-      <div class="admin-section">
-        <h4 class="admin-section-title">Turno Preliminare (GW35)</h4>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-          ${buildAdminMatchInput("playin_match1", `${standings[6]?.team?.name||"7°"} vs ${standings[9]?.team?.name||"10°"}`, playin.match1)}
-          ${buildAdminMatchInput("playin_match2", `${standings[7]?.team?.name||"8°"} vs ${standings[8]?.team?.name||"9°"}`, playin.match2)}
-        </div>
-      </div>
-
-      <!-- QUARTI -->
-      <div class="admin-section">
-        <h4 class="admin-section-title">Quarti di Finale (GW36)</h4>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          ${["qf1","qf2","qf3","qf4"].map(id =>
-            buildAdminMatchInput(id, id.toUpperCase(), bracket[id])
-          ).join("")}
-        </div>
-      </div>
-
-      <!-- SEMIS + FINALE -->
-      <div class="admin-section">
-        <h4 class="admin-section-title">Semifinali (GW37) · Finale (GW38)</h4>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-          ${["sf1","sf2","final"].map(id =>
-            buildAdminMatchInput(id, id === "final" ? "FINALE" : id.toUpperCase(), bracket[id])
-          ).join("")}
-        </div>
-      </div>
-
-      <div id="playoff-admin-error" class="form-error" style="margin-top:8px"></div>
-      <button class="btn btn-primary btn-sm" id="playoff-save-btn" style="margin-top:8px">
-        💾 Salva risultati
-      </button>
-    </div>`;
-}
-
-function buildAdminMatchInput(id, label, saved) {
-  return `
-    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px">
-      <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:8px">${label}</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <div class="form-group" style="flex:1">
-          <label class="form-label">FP Top</label>
-          <input class="form-input" id="playoff-${id}-top" type="number" step="0.1"
-            value="${saved?.fpTop ?? ""}" placeholder="Es. 87.5">
-        </div>
-        <div class="form-group" style="flex:1">
-          <label class="form-label">FP Bot</label>
-          <input class="form-input" id="playoff-${id}-bot" type="number" step="0.1"
-            value="${saved?.fpBot ?? ""}" placeholder="Es. 74.0">
-        </div>
-      </div>
-    </div>`;
-}
-
 // ── EVENTS ────────────────────────────────────────
-function bindPlayoffEvents(leagueId, league, playoff, standings, teams, scores, settings, isAdmin) {
-  if (!isAdmin) return;
-
-  document.getElementById("playoff-save-btn")?.addEventListener("click", async () => {
-    const btn   = document.getElementById("playoff-save-btn");
-    const errEl = document.getElementById("playoff-admin-error");
-    btn.disabled = true; btn.textContent = "⏳ Salvando...";
-
-    try {
-      const updates = {};
-      const matchIds = ["playin_match1","playin_match2","qf1","qf2","qf3","qf4","sf1","sf2","final"];
-
-      for (const id of matchIds) {
-        const topEl = document.getElementById(`playoff-${id}-top`);
-        const botEl = document.getElementById(`playoff-${id}-bot`);
-        if (!topEl || !botEl) continue;
-        const fpTop = parseFloat(topEl.value);
-        const fpBot = parseFloat(botEl.value);
-        if (isNaN(fpTop) || isNaN(fpBot)) continue;
-
-        const golTop = fpToGoals(fpTop);
-        const golBot = fpToGoals(fpBot);
-        const winnerId   = golTop > golBot ? "top" : golBot > golTop ? "bot" : null;
-
-        const path = id.startsWith("playin_")
-          ? `leagues/${leagueId}/playoff/playin/${id.replace("playin_","")}`
-          : `leagues/${leagueId}/playoff/bracket/${id}`;
-
-        updates[path] = { fpTop, fpBot, golTop, golBot, winnerId };
-      }
-
-      await update(ref(db), updates);
-      errEl.style.color = "var(--green)";
-      errEl.textContent = "✓ Risultati salvati";
-      setTimeout(() => errEl.textContent = "", 3000);
-
-      // Refresh
-      const { renderPlayoff } = await import("./playoff.js");
-      const snap = await get(ref(db, `leagues/${leagueId}`));
-      renderPlayoff(leagueId, snap.val(), { uid: league.commissionerUid });
-    } catch(e) {
-      errEl.style.color = "var(--red)";
-      errEl.textContent = "✗ " + e.message;
-    } finally {
-      btn.disabled = false; btn.textContent = "💾 Salva risultati";
-    }
-  });
+function bindPlayoffEvents() {
+  // No admin actions available for regular users
 }

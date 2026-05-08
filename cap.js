@@ -9,7 +9,6 @@ import { contractYearCost } from "./utils.js";
 // ── INIT ─────────────────────────────────────────
 export async function renderCap(leagueId, league, user) {
   const el      = document.getElementById("tab-cap");
-  const isAdmin = league.commissionerUid === user.uid;
   const teams   = Object.values(league.teams || {});
   const myTeam  = teams.find(t => t.ownerUid === user.uid);
   const settings = league.settings || {};
@@ -35,21 +34,18 @@ export async function renderCap(leagueId, league, user) {
       <div class="spinner"></div>
     </div>
 
-    ${isAdmin ? buildAdminCapPanel(teams, settings, leagueId) : ""}
   `;
 
   // Carica dati della prima squadra
   const firstTeamId = myTeam?.id || teams[0]?.id;
-  if (firstTeamId) await renderCapTeam(leagueId, league, firstTeamId, isAdmin);
+  if (firstTeamId) await renderCapTeam(leagueId, league, firstTeamId);
 
   document.getElementById("cap-team-select")?.addEventListener("change", async e => {
-    await renderCapTeam(leagueId, league, e.target.value, isAdmin);
+    await renderCapTeam(leagueId, league, e.target.value);
   });
-
-  if (isAdmin) bindAdminCapEvents(leagueId, league, teams, settings);
 }
 
-async function renderCapTeam(leagueId, league, teamId, isAdmin) {
+async function renderCapTeam(leagueId, league, teamId) {
   const el       = document.getElementById("cap-content");
   const settings = league.settings || {};
   const team     = Object.values(league.teams || {}).find(t => t.id === teamId);
@@ -296,143 +292,6 @@ function buildDraftPicksView(team, league) {
   }
 
   return html;
-}
-
-// ── ADMIN CAP PANEL ───────────────────────────────
-function buildAdminCapPanel(teams, settings, leagueId) {
-  return `
-    <div class="card" style="margin-top:24px;border-color:rgba(245,197,24,.2)">
-      <h3 style="font-size:15px;margin-bottom:20px">⚙️ Admin — Gestione CAP & Penalità</h3>
-
-      <!-- Penalità stagione corrente -->
-      <div class="admin-section">
-        <h4 class="admin-section-title">🏆 Applica penalità fine stagione</h4>
-        <p style="color:var(--text2);font-size:13px;margin-bottom:14px">
-          Le penalità si applicano automaticamente alla fine della Regular Season in base alla classifica finale.
-          Usa questo pannello solo per correzioni manuali.
-        </p>
-        <div class="form-grid" style="margin-bottom:12px">
-          <div class="form-group">
-            <label class="form-label">Squadra</label>
-            <select class="form-input" id="admin-penalty-team">
-              <option value="">Seleziona squadra</option>
-              ${teams.map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Penalità FM (negativo = riduce cap)</label>
-            <input class="form-input" id="admin-penalty-val" type="number" placeholder="Es. -2">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Motivo</label>
-            <select class="form-input" id="admin-penalty-reason">
-              <option value="ranking_6">6° in classifica (-1 FM)</option>
-              <option value="ranking_7">7° in classifica (-2 FM)</option>
-              <option value="ranking_8">8° in classifica (-3 FM)</option>
-              <option value="ranking_9">9° in classifica (-4 FM)</option>
-              <option value="ranking_10">10° in classifica (-6 FM)</option>
-              <option value="luxury_tax">Luxury Tax (perdita scelte)</option>
-              <option value="manual">Correzione manuale</option>
-            </select>
-          </div>
-        </div>
-        <div id="admin-penalty-error" class="form-error"></div>
-        <button class="btn btn-primary btn-sm" id="admin-penalty-btn">Applica penalità</button>
-      </div>
-
-      <!-- Assegna scelte draft -->
-      <div class="admin-section" style="margin-top:24px">
-        <h4 class="admin-section-title">📝 Assegna / trasferisci scelta Draft</h4>
-        <p style="color:var(--text2);font-size:13px;margin-bottom:14px">
-          Registra uno scambio di scelte draft tra due manager. Solo giri 1–3, max 3 stagioni avanti.
-        </p>
-        <div class="form-grid" style="margin-bottom:12px">
-          <div class="form-group">
-            <label class="form-label">Da squadra</label>
-            <select class="form-input" id="admin-pick-from">
-              <option value="">Seleziona</option>
-              ${teams.map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">A squadra</label>
-            <select class="form-input" id="admin-pick-to">
-              <option value="">Seleziona</option>
-              ${teams.map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Anno Draft</label>
-            <select class="form-input" id="admin-pick-year">
-              ${[0,1,2].map(i => { const y = new Date().getFullYear()+i; return `<option value="${y}">${y}</option>`; }).join("")}
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Giro (1–3)</label>
-            <select class="form-input" id="admin-pick-round">
-              <option value="1">1° Giro</option>
-              <option value="2">2° Giro</option>
-              <option value="3">3° Giro</option>
-            </select>
-          </div>
-        </div>
-        <div id="admin-pick-error" class="form-error"></div>
-        <button class="btn btn-primary btn-sm" id="admin-pick-btn">Trasferisci scelta</button>
-      </div>
-
-    </div>`;
-}
-
-function bindAdminCapEvents(leagueId, league, teams, settings) {
-  // Penalità
-  document.getElementById("admin-penalty-btn")?.addEventListener("click", async () => {
-    const teamId = document.getElementById("admin-penalty-team").value;
-    const val    = parseInt(document.getElementById("admin-penalty-val").value) || 0;
-    const reason = document.getElementById("admin-penalty-reason").value;
-    const errEl  = document.getElementById("admin-penalty-error");
-    if (!teamId) { errEl.textContent = "Seleziona una squadra"; return; }
-    try {
-      await update(ref(db, `leagues/${leagueId}/teams/${teamId}`), { capPenalty: val });
-      // Log
-      await push(ref(db, `leagues/${leagueId}/capLog`), {
-        teamId, type: "penalty", val, reason, at: Date.now(),
-      });
-      errEl.style.color = "var(--green)";
-      errEl.textContent = "✓ Penalità applicata";
-      setTimeout(() => errEl.textContent = "", 3000);
-    } catch(e) { errEl.textContent = e.message; }
-  });
-
-  // Trasferisci scelta
-  document.getElementById("admin-pick-btn")?.addEventListener("click", async () => {
-    const fromId = document.getElementById("admin-pick-from").value;
-    const toId   = document.getElementById("admin-pick-to").value;
-    const year   = document.getElementById("admin-pick-year").value;
-    const round  = document.getElementById("admin-pick-round").value;
-    const errEl  = document.getElementById("admin-pick-error");
-    if (!fromId || !toId)     { errEl.textContent = "Seleziona entrambe le squadre"; return; }
-    if (fromId === toId)      { errEl.textContent = "Le squadre devono essere diverse"; return; }
-    const fromTeam = teams.find(t => t.id === fromId);
-    const toTeam   = teams.find(t => t.id === toId);
-    const pickKey  = `${year}_round${round}`;
-    try {
-      const pickData = {
-        year: parseInt(year), round: parseInt(round),
-        fromTeamId: fromId, fromTeamName: fromTeam.name,
-        toTeamId: toId, toTeamName: toTeam.name,
-        ownerTeamId: toId, transferredAt: Date.now(),
-      };
-      // Aggiorna picks della squadra destinataria
-      await update(ref(db, `leagues/${leagueId}/teams/${toId}/draftPicks`), { [pickKey]: pickData });
-      // Marca la scelta come ceduta per la squadra cedente
-      await update(ref(db, `leagues/${leagueId}/teams/${fromId}/draftPicks`), {
-        [pickKey]: { ...pickData, ownerTeamId: toId, traded: true },
-      });
-      errEl.style.color = "var(--green)";
-      errEl.textContent = `✓ Scelta ${year} giro ${round} trasferita da ${fromTeam.name} a ${toTeam.name}`;
-      setTimeout(() => errEl.textContent = "", 4000);
-    } catch(e) { errEl.textContent = e.message; }
-  });
 }
 
 // ── HELPERS ──────────────────────────────────────

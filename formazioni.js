@@ -11,7 +11,6 @@ import { roleColor, macroRole } from "./utils.js";
 let _leagueId   = null;
 let _league     = null;
 let _user       = null;
-let _isAdmin    = false;
 let _teamId     = null;
 let _teamPlayers = [];
 let _gw         = 1;
@@ -25,7 +24,6 @@ export async function renderFormazioni(leagueId, league, user) {
   _leagueId = leagueId;
   _league   = league;
   _user     = user;
-  _isAdmin  = league.commissionerUid === user.uid;
 
   const teams    = Object.values(league.teams || {});
   const myTeam   = teams.find(t => t.ownerUid === user.uid);
@@ -63,7 +61,7 @@ function buildFormazioniHTML(teams, myTeam, settings) {
         <select class="form-input" id="fm-team-select">
           ${myTeam ? `<option value="${myTeam.id}" selected>🏠 ${myTeam.name} (la mia)</option>` : ""}
           ${teams.filter(t => !myTeam || t.id !== myTeam.id).map(t =>
-            `<option value="${t.id}"${!myTeam && _isAdmin ? "" : " disabled"}>${t.name} (${t.ownerName})</option>`
+            `<option value="${t.id}" disabled>${t.name} (${t.ownerName})</option>`
           ).join("")}
         </select>
       </div>
@@ -370,9 +368,9 @@ async function saveFormazione() {
 
 // ── EVENTS ────────────────────────────────────────
 function bindFormazioniEvents(teams, myTeam, settings) {
-  // Cambio team (solo admin)
+  // Cambio team (solo la propria squadra)
   document.getElementById("fm-team-select")?.addEventListener("change", async e => {
-    if (!_isAdmin && e.target.value !== myTeam?.id) return;
+    if (e.target.value !== myTeam?.id) return;
     _teamId = e.target.value;
     const team = teams.find(t => t.id === _teamId);
     _teamPlayers = Object.values(team?.players || {});

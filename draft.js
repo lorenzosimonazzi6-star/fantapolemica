@@ -15,7 +15,6 @@ let _league        = null;
 let _user          = null;
 let _myTeam        = null;
 let _teams         = [];
-let _isAdmin       = false;
 let _draftType     = "estivo";
 let _draftListener = null;
 let _presenceInt   = null;
@@ -31,7 +30,6 @@ export async function renderDraft(leagueId, league, user) {
   _user     = user;
   _teams    = Object.values(league.teams || {});
   _myTeam   = _teams.find(t => t.ownerUid === user.uid);
-  _isAdmin  = league.commissionerUid === user.uid;
 
   const el = document.getElementById("tab-draft");
 
@@ -166,22 +164,8 @@ function startTimer(turnStartedAt) {
     const s = String(remaining%60).padStart(2,"0");
     el.textContent = `${m}:${s}`;
     el.className   = `draft-timer ${remaining<=30?"timer-urgent":remaining<=60?"timer-warn":""}`;
-    if (remaining===0 && _isAdmin) { clearInterval(_timerInt); await autoSkip(); }
+    if (remaining===0) { clearInterval(_timerInt); }
   }, 1000);
-}
-
-async function autoSkip() {
-  const snap = await get(ref(db, `leagues/${_leagueId}/draftState`));
-  const ds   = snap.val();
-  if (ds?.status!=="active") return;
-  const order = ds.order || buildDraftOrder([],{},ds);
-  const cp    = getCurrentPick(ds, order);
-  if (!cp?.team) return;
-  await push(ref(db, `leagues/${_leagueId}/draftState/picks`), {
-    teamId: cp.team.id, playerName:"SKIP", skipped:true,
-    round:cp.round, posInRound:cp.posInRound, pickedAt:Date.now(),
-  });
-  await update(ref(db, `leagues/${_leagueId}/draftState`), { turnStartedAt:Date.now() });
 }
 
 // ── CONFIRM PICK ──────────────────────────────────
@@ -301,7 +285,6 @@ function buildDraftHTML(draftState, draftOrder, standings, lotteryData) {
               ⚠ Vai nella tab <strong>Rose</strong> per assegnare i contratti entro il termine.
             </p>
           </div>`}
-          ${_isAdmin ? buildAdminControls(draftState,lotteryDone) : ""}
         </div>
       </div>
     </div>` : ""}
@@ -330,19 +313,6 @@ function buildLobbyHTML(draftState, lotteryDone) {
         <button class="btn btn-primary" id="ready-btn">✋ Sono pronto</button>
         <button class="btn btn-ghost btn-sm" id="not-ready-btn">✗ Non sono pronto</button>
         <span id="ready-status" style="font-size:13px"></span>
-      </div>` : ""}
-      ${_isAdmin && !lotteryDone ? `
-      <div style="margin-top:12px;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);border-radius:8px;padding:10px;font-size:12px;color:var(--orange)">
-        ⚠ Lottery non eseguita — ordine giro 1 sarà inverso classifica.
-      </div>` : ""}
-      ${_isAdmin ? `
-      <div style="margin-top:12px">
-        <button class="btn btn-primary" id="draft-start-btn" disabled title="Attendi che tutti siano pronti">
-          ▶ Avvia Draft
-        </button>
-        <span style="font-size:12px;color:var(--text2);margin-left:8px" id="start-hint">
-          In attesa che tutti i manager siano pronti…
-        </span>
       </div>` : ""}
     </div>`;
 }
@@ -413,7 +383,6 @@ function buildPlayersList(draftState, draftOrder, isActive, isMyTurn, maxSpend) 
     const isU21      = age!==null && age<=21;
     const cantAfford = cost > maxSpend;
     const canPick    = isActive && isMyTurn && !cantAfford;
-    const adminPick  = _isAdmin && isActive && !cantAfford && !isMyTurn;
     return `
       <div class="draft-player-row ${cantAfford?"draft-cant-afford":""}">
         <span class="rose-role-badge" style="background:${roleColor(p.roles?.[0])};font-size:10px;flex-shrink:0">${(p.roles||[]).join("/")}</span>
@@ -422,31 +391,10 @@ function buildPlayersList(draftState, draftOrder, isActive, isMyTurn, maxSpend) 
           <span class="draft-player-sub">${p.team}${age!==null?` · ${age} anni`:""}${isU21?" 🔵":""}</span>
         </div>
         <span class="draft-player-cost ${cantAfford?"cost-red":""}">${cost} FM</span>
-        ${canPick    ? `<button class="btn btn-primary  btn-sm draft-pick-btn"       data-pid="${p.id||p.name}">Scegli</button>` : ""}
-        ${adminPick  ? `<button class="btn btn-secondary btn-sm draft-pick-btn-admin" data-pid="${p.id||p.name}">Pick</button>`  : ""}
+        ${canPick    ? `<button class="btn btn-primary btn-sm draft-pick-btn" data-pid="${p.id||p.name}">Scegli</button>` : ""}
         ${cantAfford ? `<span style="font-size:10px;color:var(--red);flex-shrink:0">FM insuff.</span>` : ""}
       </div>`;
   }).join("");
-}
-
-function buildAdminControls(draftState, lotteryDone) {
-  const status = draftState?.status||"idle";
-  return `
-    <div class="card card-sm" style="margin-top:12px;border-color:rgba(245,197,24,.2)">
-      <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">⚙️ Admin</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${status==="active" ? `
-          <button class="btn btn-secondary btn-sm" id="draft-pause-btn">⏸ Pausa</button>
-          <button class="btn btn-ghost    btn-sm" id="draft-skip-btn">⏭ Salta turno</button>
-          <button class="btn btn-danger   btn-sm" id="draft-end-btn">⏹ Termina</button>` : ""}
-        ${status==="paused" ? `
-          <button class="btn btn-primary btn-sm" id="draft-resume-btn">▶ Riprendi</button>
-          <button class="btn btn-danger  btn-sm" id="draft-end-btn">⏹ Termina</button>` : ""}
-        ${status==="done" ? `
-          <button class="btn btn-ghost btn-sm" id="draft-reset-btn">↺ Reset</button>` : ""}
-      </div>
-      <div id="draft-admin-error" class="form-error" style="margin-top:6px"></div>
-    </div>`;
 }
 
 // ── LISTENER REAL-TIME ────────────────────────────
@@ -468,19 +416,6 @@ function _startDraftListener(leagueId, standings, lotteryData) {
       item.querySelector(".presence-status").textContent =
         ready ? "✓ Pronto" : online ? "Online" : "Offline";
     });
-    // Abilita start solo se tutti pronti
-    const startBtn = document.getElementById("draft-start-btn");
-    if (startBtn && _isAdmin) {
-      const allReady = _teams.every(t => {
-        const p = presence[t.id];
-        return p && (now-p.ts)<30000 && p.ready;
-      });
-      startBtn.disabled = !allReady;
-      const hint = document.getElementById("start-hint");
-      if (hint) hint.textContent = allReady
-        ? "✓ Tutti pronti — puoi avviare!"
-        : `In attesa… (${_teams.filter(t=>{const p=presence[t.id];return p&&(now-p.ts)<30000&&p.ready;}).length}/${_teams.length} pronti)`;
-    }
   });
 
   // Draft state
@@ -544,15 +479,6 @@ function bindDraftEvents(leagueId, draftState, draftOrder, standings) {
     if (el) el.textContent="";
   });
 
-  document.getElementById("draft-start-btn")?.addEventListener("click", async () => {
-    if (!confirm("Avviare il Draft?")) return;
-    await set(ref(db, `leagues/${leagueId}/draftState`), {
-      status:"active", type:_draftType,
-      startedAt:Date.now(), turnStartedAt:Date.now(),
-      picks:{}, order:draftOrder,
-    });
-  });
-
   document.getElementById("draft-search")?.addEventListener("input", e => {
     _searchFilter = e.target.value;
     _refreshList(draftState, draftOrder);
@@ -567,7 +493,6 @@ function bindDraftEvents(leagueId, draftState, draftOrder, standings) {
     }
   });
 
-  if (_isAdmin) bindAdminControlEvents(leagueId);
   const cp = getCurrentPick(draftState, draftOrder);
   bindDynamicEvents(draftState, draftOrder, cp?.team?.id===_myTeam?.id, cp);
 }
@@ -583,7 +508,7 @@ function _refreshList(draftState, draftOrder) {
 }
 
 function bindDynamicEvents(draftState, draftOrder, isMyTurn, cp) {
-  document.querySelectorAll(".draft-pick-btn, .draft-pick-btn-admin").forEach(btn => {
+  document.querySelectorAll(".draft-pick-btn").forEach(btn => {
     btn.onclick = () => {
       const pid    = btn.dataset.pid;
       const player = Object.values(_dbPlayers).find(p=>(p.id||p.name)===pid||p.name===pid);
@@ -591,14 +516,6 @@ function bindDynamicEvents(draftState, draftOrder, isMyTurn, cp) {
       confirmPick(player, cp.team.id, cp.round, cp.posInRound);
     };
   });
-}
-
-function bindAdminControlEvents(leagueId) {
-  document.getElementById("draft-pause-btn")?.addEventListener("click",  async ()=>{ await update(ref(db,`leagues/${leagueId}/draftState`),{status:"paused"}); });
-  document.getElementById("draft-resume-btn")?.addEventListener("click", async ()=>{ await update(ref(db,`leagues/${leagueId}/draftState`),{status:"active",turnStartedAt:Date.now()}); });
-  document.getElementById("draft-end-btn")?.addEventListener("click",    async ()=>{ if(confirm("Terminare?")) await update(ref(db,`leagues/${leagueId}/draftState`),{status:"done"}); });
-  document.getElementById("draft-reset-btn")?.addEventListener("click",  async ()=>{ if(confirm("Reset draft?")) await set(ref(db,`leagues/${leagueId}/draftState`),{status:"idle"}); });
-  document.getElementById("draft-skip-btn")?.addEventListener("click",   async ()=>{ if(confirm("Saltare turno?")) await autoSkip(); });
 }
 
 function getCapLevel(cap, settings) {
